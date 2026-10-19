@@ -1,0 +1,6 @@
+{
+  "name": "Data-Driven PWA Calorie Tracker",
+  "description": "Progressive Web App calorie and nutrition calculator powered by a Data-Driven UI config with Gemini Flash AI assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
