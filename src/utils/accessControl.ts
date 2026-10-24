@@ -314,7 +314,7 @@ export async function callCloudflareWorkerAI(payload: {
     ...(payload.extraPayload || {}),
   };
 
-  const response = await fetch(CLOUDFLARE_WORKER_URL, {
+  const response = await fetch('https://api.smartfoodasystent.workers.dev/', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
