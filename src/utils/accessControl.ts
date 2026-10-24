@@ -2,13 +2,6 @@ import { MetricConfig, UserConfig } from '../types/config';
 
 export const CLOUDFLARE_WORKER_URL = 'https://api.smartfoodasystent.workers.dev';
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash-lite';
-export const GEMINI_MODEL_FALLBACK_CHAIN = [
-  'gemini-3.5-flash-lite',
-  'gemini-3.1-flash-lite',
-  'gemini-2.5-flash-lite',
-  'gemini-2.5-flash',
-  'gemini-flash-latest',
-];
 export const STRIPE_PAYMENT_URL = 'https://buy.stripe.com/test_placeholder';
 export const ACCESS_KEY_STORAGE_KEY = 'app_access_key';
 
@@ -310,7 +303,6 @@ export async function callCloudflareWorkerAI(payload: {
 
   const requestBody: Record<string, any> = {
     model: DEFAULT_GEMINI_MODEL,
-    fallbackModels: GEMINI_MODEL_FALLBACK_CHAIN,
     contents: [
       {
         role: 'user',
@@ -324,18 +316,20 @@ export async function callCloudflareWorkerAI(payload: {
     ...(payload.extraPayload || {}),
   };
 
-  // Try endpoints in order: external Cloudflare Worker URL and same-origin Cloudflare Worker (/api/worker)
-  const endpointsToTry =
-    typeof window !== 'undefined'
-      ? [CLOUDFLARE_WORKER_URL, '/api/worker']
-      : [CLOUDFLARE_WORKER_URL];
+  let response = await fetch(CLOUDFLARE_WORKER_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-access-token': savedAccessKey || '',
+    },
+    body: JSON.stringify(requestBody),
+  });
 
-  let response: Response | null = null;
-  let lastFetchError: any = null;
-
-  for (const endpointUrl of endpointsToTry) {
+  // If the remote static host still returns 405 before worker.js/wrangler.toml is deployed,
+  // try same-origin /api/worker fallback so camera/AI works in preview and hybrid environments
+  if (response.status === 405 && typeof window !== 'undefined') {
     try {
-      const candidateRes = await fetch(endpointUrl, {
+      const fallbackRes = await fetch('/api/worker', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -343,31 +337,12 @@ export async function callCloudflareWorkerAI(payload: {
         },
         body: JSON.stringify(requestBody),
       });
-
-      response = candidateRes;
-
-      // If this endpoint succeeded or returned a definitive auth/quota response, use it
-      if (
-        candidateRes.ok ||
-        candidateRes.status === 401 ||
-        candidateRes.status === 402 ||
-        candidateRes.status === 403 ||
-        candidateRes.status === 429
-      ) {
-        break;
+      if (fallbackRes.status !== 404 && fallbackRes.status !== 405) {
+        response = fallbackRes;
       }
-
-      // If 404, 405 (static server), or 500 (e.g. key configured on the other endpoint), try next endpoint
-    } catch (fetchErr) {
-      lastFetchError = fetchErr;
+    } catch {
+      // keep original response if same-origin fallback is unavailable
     }
-  }
-
-  if (!response) {
-    throw new Error(
-      lastFetchError?.message ||
-        'Не удалось подключиться к серверу ИИ Cloudflare. Проверьте интернет-соединение.'
-    );
   }
 
   if (response.status === 401 || response.status === 402 || response.status === 403 || response.status === 429) {

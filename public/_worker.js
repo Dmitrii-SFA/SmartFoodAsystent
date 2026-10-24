@@ -1,7 +1,7 @@
 /**
- * Cloudflare Pages / Workers Static Assets Advanced Mode (_worker.js)
- * Automatically copied into dist/_worker.js during Vite build so Cloudflare
- * routes POST/OPTIONS requests to this Worker instead of returning 405 Method Not Allowed.
+ * Cloudflare Pages / Assets _worker.js entry point for Smart Food Assistance
+ * Self-contained copy placed in dist/_worker.js on build so Cloudflare Pages
+ * also handles POST & OPTIONS requests without 405 Method Not Allowed.
  */
 
 const CORS_HEADERS = {
@@ -15,7 +15,6 @@ const MODEL_FALLBACK_CHAIN = [
   'gemini-3.5-flash-lite',
   'gemini-3.1-flash-lite',
   'gemini-2.5-flash-lite',
-  'gemini-2.5-flash',
   'gemini-flash-latest',
 ];
 
@@ -31,9 +30,8 @@ function jsonResponse(body, status = 200) {
 
 export default {
   async fetch(request, env, ctx) {
-    const method = (request.method || 'GET').toUpperCase();
+    const method = request.method.toUpperCase();
 
-    // 1. Handle CORS Preflight (OPTIONS)
     if (method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
@@ -41,21 +39,14 @@ export default {
       });
     }
 
-    // 2. Handle AI POST requests (camera photo scan, food estimation, recipes, chat)
     if (method === 'POST') {
-      const apiKey = (
-        env?.GEMINI_API_KEY ||
-        env?.GOOGLE_GEMINI_API_KEY ||
-        env?.API_KEY ||
-        ''
-      ).trim();
-
+      const apiKey = env?.GEMINI_API_KEY;
       if (!apiKey) {
         return jsonResponse(
           {
             error: {
               message:
-                'GEMINI_API_KEY не найден в секретах Cloudflare (Settings -> Variables and Secrets).',
+                'GEMINI_API_KEY не настроен в секретах Cloudflare (Settings -> Variables and Secrets).',
             },
           },
           500
@@ -95,16 +86,10 @@ export default {
           ? requestBody.model.trim()
           : 'gemini-3.5-flash-lite';
 
-      const customFallbacks = Array.isArray(requestBody.fallbackModels)
-        ? requestBody.fallbackModels.filter((m) => typeof m === 'string' && m.trim())
-        : [];
-
-      const mergedChain = [
+      const modelsToTry = [
         requestedModel,
-        ...customFallbacks,
-        ...MODEL_FALLBACK_CHAIN,
+        ...MODEL_FALLBACK_CHAIN.filter((m) => m !== requestedModel),
       ];
-      const modelsToTry = Array.from(new Set(mergedChain));
 
       const geminiPayload = {
         contents: requestBody.contents || [],
@@ -127,21 +112,13 @@ export default {
           modelName
         )}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
-        let upstreamResponse;
-        try {
-          upstreamResponse = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(geminiPayload),
-          });
-        } catch (networkErr) {
-          lastResponseData = {
-            error: { message: networkErr?.message || 'Network error calling Gemini API' },
-          };
-          continue;
-        }
+        const upstreamResponse = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(geminiPayload),
+        });
 
         lastStatus = upstreamResponse.status;
         try {
@@ -162,11 +139,7 @@ export default {
           );
         }
 
-        if (
-          upstreamResponse.status === 404 ||
-          upstreamResponse.status === 400 ||
-          upstreamResponse.status === 503
-        ) {
+        if (upstreamResponse.status === 404 || upstreamResponse.status === 400) {
           continue;
         }
 
@@ -179,7 +152,6 @@ export default {
       );
     }
 
-    // 3. Handle GET / HEAD requests via Cloudflare ASSETS binding
     if (env?.ASSETS && typeof env.ASSETS.fetch === 'function') {
       const assetResponse = await env.ASSETS.fetch(request);
       if (assetResponse.status !== 404) {
@@ -196,7 +168,6 @@ export default {
       status: 'ok',
       service: 'Smart Food Assistance Cloudflare Worker',
       model: 'gemini-3.5-flash-lite',
-      fallbackChain: MODEL_FALLBACK_CHAIN,
     });
   },
 };

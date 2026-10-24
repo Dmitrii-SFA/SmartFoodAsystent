@@ -1081,16 +1081,12 @@ app.post('/api/worker', async (req: Request, res: Response) => {
       'gemini-3.5-flash-lite',
       'gemini-3.1-flash-lite',
       'gemini-2.5-flash-lite',
-      'gemini-2.5-flash',
       'gemini-flash-latest',
     ];
-    const customFallbacks = Array.isArray(requestBody.fallbackModels)
-      ? requestBody.fallbackModels.filter((m: any) => typeof m === 'string' && m.trim())
-      : [];
-
-    const modelsToTry = Array.from(
-      new Set([requestedModel, ...customFallbacks, ...fallbackModels])
-    );
+    const modelsToTry = [
+      requestedModel,
+      ...fallbackModels.filter((m) => m !== requestedModel),
+    ];
 
     const geminiPayload: Record<string, any> = {
       contents: requestBody.contents || [],
@@ -1131,11 +1127,7 @@ app.post('/api/worker', async (req: Request, res: Response) => {
         return;
       }
 
-      if (
-        upstreamRes.status === 404 ||
-        upstreamRes.status === 400 ||
-        upstreamRes.status === 503
-      ) {
+      if (upstreamRes.status === 404 || upstreamRes.status === 400) {
         continue;
       }
       break;
