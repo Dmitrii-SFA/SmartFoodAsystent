@@ -1,7 +1,6 @@
 import { MetricConfig, UserConfig } from '../types/config';
 
 export const CLOUDFLARE_WORKER_URL = 'https://api.smartfoodasystent.workers.dev';
-export const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash-lite';
 export const STRIPE_PAYMENT_URL = 'https://buy.stripe.com/test_placeholder';
 export const ACCESS_KEY_STORAGE_KEY = 'app_access_key';
 
@@ -302,7 +301,6 @@ export async function callCloudflareWorkerAI(payload: {
   }
 
   const requestBody: Record<string, any> = {
-    model: DEFAULT_GEMINI_MODEL,
     contents: [
       {
         role: 'user',
@@ -316,7 +314,7 @@ export async function callCloudflareWorkerAI(payload: {
     ...(payload.extraPayload || {}),
   };
 
-  let response = await fetch(CLOUDFLARE_WORKER_URL, {
+  const response = await fetch(CLOUDFLARE_WORKER_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -324,26 +322,6 @@ export async function callCloudflareWorkerAI(payload: {
     },
     body: JSON.stringify(requestBody),
   });
-
-  // If the remote static host still returns 405 before worker.js/wrangler.toml is deployed,
-  // try same-origin /api/worker fallback so camera/AI works in preview and hybrid environments
-  if (response.status === 405 && typeof window !== 'undefined') {
-    try {
-      const fallbackRes = await fetch('/api/worker', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-access-token': savedAccessKey || '',
-        },
-        body: JSON.stringify(requestBody),
-      });
-      if (fallbackRes.status !== 404 && fallbackRes.status !== 405) {
-        response = fallbackRes;
-      }
-    } catch {
-      // keep original response if same-origin fallback is unavailable
-    }
-  }
 
   if (response.status === 401 || response.status === 402 || response.status === 403 || response.status === 429) {
     payload.onOpenPaywall?.();
