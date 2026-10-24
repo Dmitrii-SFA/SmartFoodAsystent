@@ -541,27 +541,12 @@ export function getSvgDataUrl(variant: SmartFoodIconVariant): string {
 }
 
 /**
- * Dynamically updates browser favicon, apple-touch-icon, and document title
- * so the selected icon is immediately active when installing or bookmarking the PWA.
+ * Keeps browser favicon, apple-touch-icon, and document title aligned with the
+ * official icons located in /public.
  */
-export function applyAppIconToDocument(iconId: number, langCode: string = 'ru'): void {
+export function applyAppIconToDocument(_iconId: number, langCode: string = 'ru'): void {
   if (typeof document === 'undefined') return;
-  const variant = SMART_FOOD_ICONS.find((i) => i.id === iconId) || SMART_FOOD_ICONS[0];
-  const svgMarkup = getFullSvgMarkup(variant);
-  const svgDataUrl = getSvgDataUrl(variant);
 
-  // Sync the chosen icon to the backend so public/icon.svg is permanently updated for all devices
-  try {
-    fetch('/api/app-icon', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ iconId: variant.id, svg: svgMarkup }),
-    }).catch(() => {});
-  } catch {
-    // ignore network error
-  }
-
-  // Update SVG favicon link
   let svgLink = document.querySelector("link[rel='icon'][type='image/svg+xml']") as HTMLLinkElement | null;
   if (!svgLink) {
     svgLink = document.createElement('link');
@@ -569,94 +554,23 @@ export function applyAppIconToDocument(iconId: number, langCode: string = 'ru'):
     svgLink.type = 'image/svg+xml';
     document.head.appendChild(svgLink);
   }
-  svgLink.href = svgDataUrl;
+  svgLink.href = '/icon.svg';
 
-  // Rasterize to 192x192 and 512x512 PNG for apple-touch-icon, standard favicon, and Web App Manifest
-  const img = new Image();
-  img.onload = () => {
-    try {
-      const renderPng = (size: number): string => {
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, size, size);
-          return canvas.toDataURL('image/png');
-        }
-        return svgDataUrl;
-      };
+  let appleLink = document.querySelector("link[rel='apple-touch-icon']") as HTMLLinkElement | null;
+  if (!appleLink) {
+    appleLink = document.createElement('link');
+    appleLink.rel = 'apple-touch-icon';
+    document.head.appendChild(appleLink);
+  }
+  appleLink.href = '/apple-touch-icon.png';
 
-      const png192 = renderPng(192);
-      const png512 = renderPng(512);
-
-      let appleLink = document.querySelector("link[rel='apple-touch-icon']") as HTMLLinkElement | null;
-      if (!appleLink) {
-        appleLink = document.createElement('link');
-        appleLink.rel = 'apple-touch-icon';
-        document.head.appendChild(appleLink);
-      }
-      appleLink.href = png512;
-
-      let icoLink = document.querySelector("link[rel='icon']:not([type='image/svg+xml'])") as HTMLLinkElement | null;
-      if (!icoLink) {
-        icoLink = document.createElement('link');
-        icoLink.rel = 'icon';
-        icoLink.type = 'image/png';
-        document.head.appendChild(icoLink);
-      }
-      icoLink.href = png512;
-
-      // Dynamically update PWA Web App Manifest with the locked icon for smartphones & desktops
-      const dynamicManifest = {
-        id: '/',
-        name: 'Smart Food Assistance — Умный ассистент питания',
-        short_name: 'Smart Food',
-        description: 'Smart Food Assistance — умный ассистент питания, дневник КБЖУ и рецептов',
-        theme_color: '#0f172a',
-        background_color: '#0f172a',
-        display: 'standalone',
-        orientation: 'portrait',
-        scope: '/',
-        start_url: '/',
-        icons: [
-          {
-            src: png192,
-            sizes: '192x192',
-            type: 'image/png',
-            purpose: 'any maskable',
-          },
-          {
-            src: png512,
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable',
-          },
-          {
-            src: svgDataUrl,
-            sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'any maskable',
-          },
-        ],
-      };
-
-      const manifestBlob = new Blob([JSON.stringify(dynamicManifest)], {
-        type: 'application/manifest+json',
-      });
-      const manifestUrl = URL.createObjectURL(manifestBlob);
-      let manifestLink = document.querySelector("link[rel='manifest']") as HTMLLinkElement | null;
-      if (!manifestLink) {
-        manifestLink = document.createElement('link');
-        manifestLink.rel = 'manifest';
-        document.head.appendChild(manifestLink);
-      }
-      manifestLink.href = manifestUrl;
-    } catch {
-      // Ignore canvas security errors if any
-    }
-  };
-  img.src = svgDataUrl;
+  let icoLink = document.querySelector("link[rel='icon']:not([type='image/svg+xml'])") as HTMLLinkElement | null;
+  if (!icoLink) {
+    icoLink = document.createElement('link');
+    icoLink.rel = 'icon';
+    document.head.appendChild(icoLink);
+  }
+  icoLink.href = '/favicon.ico';
 
   // Update document title to Smart Food Assistance
   if (langCode === 'ru') {
