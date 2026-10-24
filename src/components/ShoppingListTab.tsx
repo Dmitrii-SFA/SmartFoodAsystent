@@ -146,36 +146,38 @@ export const ShoppingListTab: React.FC<ShoppingListTabProps> = ({
           {shoppingList.map((item) => (
             <div
               key={item.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800 hover:border-slate-700 transition"
+              className="flex items-start justify-between gap-2 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800 hover:border-slate-700 transition"
             >
-              <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="flex items-center gap-2 min-w-0 flex-1 min-h-[32px]">
                 <div
                   className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                   style={{ backgroundColor: `${accentColor}20`, color: accentColor }}
                 >
                   <ShoppingCart className="w-3.5 h-3.5" />
                 </div>
-                <span className={`text-xs font-bold break-words ${themeStyles.textPrimary}`}>
+                <span className={`text-xs font-bold break-words leading-snug ${themeStyles.textPrimary}`}>
                   {item.name}
                 </span>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <input
                   type="text"
-                  placeholder={t.shoppingQuantityPlaceholder}
+                  maxLength={10}
+                  size={10}
+                  placeholder="Кол-во"
                   value={item.quantity}
-                  onChange={(e) => onUpdateQuantity(item.id, e.target.value)}
-                  className="flex-1 sm:w-52 min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-950/90 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-emerald-500"
+                  onChange={(e) => onUpdateQuantity(item.id, e.target.value.slice(0, 10))}
+                  className="w-[11ch] h-8 px-2 py-1 rounded-lg bg-slate-950/90 border border-slate-700/80 text-xs font-mono text-center text-white placeholder-slate-500 focus:outline-hidden focus:border-emerald-500"
                 />
 
                 <button
                   type="button"
                   onClick={() => onDeleteItem(item.id)}
-                  className="p-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 border border-red-500/30 text-red-300 hover:text-red-200 transition shrink-0"
+                  className="h-8 w-8 flex items-center justify-center rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-500/30 text-red-300 hover:text-red-200 transition shrink-0"
                   title={t.delete}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
@@ -280,9 +282,10 @@ export const ShoppingListTab: React.FC<ShoppingListTabProps> = ({
                     </label>
                     <input
                       type="text"
+                      maxLength={10}
                       placeholder={t.shoppingQuantityPlaceholder}
                       value={quantityInput}
-                      onChange={(e) => setQuantityInput(e.target.value)}
+                      onChange={(e) => setQuantityInput(e.target.value.slice(0, 10))}
                       autoFocus
                       className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-hidden focus:border-emerald-500"
                     />

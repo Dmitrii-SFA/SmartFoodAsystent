@@ -37,6 +37,7 @@ import {
   Utensils,
   Check,
 } from 'lucide-react';
+import { analyzeCookingWithWorker, AiQuotaError } from '../../utils/accessControl';
 
 interface CookwareTimelineEditorProps {
   vessels: CookwareVessel[];
@@ -51,6 +52,8 @@ interface CookwareTimelineEditorProps {
   onUpdateProcessConfig: (config: CookingProcessConfig) => void;
   sessionAiCreatedFoodIds?: string[];
   onRemoveAiCreatedFoodFromLibrary?: (foodId: string) => void;
+  onOpenPaywallModal?: () => void;
+  onQuotaUsed?: (count: number) => void;
 }
 
 interface StepRegimeDraft {
@@ -69,13 +72,14 @@ export const CookwareTimelineEditor: React.FC<CookwareTimelineEditorProps> = ({
   ingredients,
   accentColor,
   langCode = 'ru',
-  aiConfig,
   onChangeVessels,
   onUpdateIngredients,
   cookingProcessConfig,
   onUpdateProcessConfig,
   sessionAiCreatedFoodIds = [],
   onRemoveAiCreatedFoodFromLibrary,
+  onOpenPaywallModal,
+  onQuotaUsed,
 }) => {
   const [activeAddStepVesselId, setActiveAddStepVesselId] = useState<string | null>(null);
   const [stepFoodSearch, setStepFoodSearch] = useState('');
@@ -718,42 +722,41 @@ export const CookwareTimelineEditor: React.FC<CookwareTimelineEditorProps> = ({
     syncVesselsAndPhysics(nextVessels, nextIngredients);
   };
 
-  // Run Chef AI Analysis on the multi-vessel cooking timeline
+  // Run Chef AI Analysis on the multi-vessel cooking timeline via Cloudflare Worker
   const handleRunChefAiAnalysis = async () => {
     if (vessels.length === 0) return;
     setIsAiAnalyzing(true);
 
     try {
-      const res = await fetch('/api/recipes/analyze-cooking', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vessels,
-          ingredients,
-          physics,
-          aiConfig,
-        }),
+      const data = await analyzeCookingWithWorker({
+        vessels,
+        ingredients,
+        totalRawWeightGrams: physics.rawWeightGrams,
+        calculatedEvaporationMl: physics.evaporatedWaterMl,
+        finalDishWeightGrams: physics.finalDishWeightGrams,
+        onOpenPaywall: onOpenPaywallModal,
+        onQuotaUsed,
       });
-
-      if (!res.ok) throw new Error('AI analysis failed');
-      const data = await res.json();
 
       onUpdateProcessConfig({
         ...cookingProcessConfig,
         isEnabled: true,
         vessels,
         rawWeightGrams: physics.rawWeightGrams,
-        evaporatedWaterMl: data.evaporatedWaterMl ?? physics.evaporatedWaterMl,
-        weightDeltaGrams: data.weightDeltaGrams ?? physics.weightDeltaGrams,
-        finalDishWeightGrams: data.finalDishWeightGrams ?? physics.finalDishWeightGrams,
+        evaporatedWaterMl: data?.evaporatedWaterMl ?? physics.evaporatedWaterMl,
+        weightDeltaGrams: data?.weightDeltaGrams ?? physics.weightDeltaGrams,
+        finalDishWeightGrams: data?.finalDishWeightGrams ?? physics.finalDishWeightGrams,
         aiAnalysis: {
-          note: data.note || 'Анализ термообработки выполнен.',
-          nutrientImpact: data.nutrientImpact,
-          chefTips: data.chefTips,
+          note: data?.note || 'Анализ термообработки выполнен.',
+          nutrientImpact: data?.nutrientImpact,
+          chefTips: data?.chefTips,
           analyzedAt: Date.now(),
         },
       });
-    } catch {
+    } catch (err: any) {
+      if (err instanceof AiQuotaError) {
+        return;
+      }
       onUpdateProcessConfig({
         ...cookingProcessConfig,
         isEnabled: true,

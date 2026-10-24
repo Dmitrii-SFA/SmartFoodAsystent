@@ -146,9 +146,9 @@ export const CompactNutrientsList: React.FC<CompactNutrientsListProps> = ({
               style={{ backgroundColor: metric.color }}
             />
             <span
-              className={`font-semibold truncate ${
-                isPrimarySection ? themeStyles.textPrimary : 'text-slate-300'
-              }`}
+              className={`font-semibold ${
+                isWater ? 'shrink-0 whitespace-nowrap' : 'truncate'
+              } ${isPrimarySection ? themeStyles.textPrimary : 'text-slate-300'}`}
             >
               {metric.label}
             </span>
@@ -159,7 +159,7 @@ export const CompactNutrientsList: React.FC<CompactNutrientsListProps> = ({
                 type="button"
                 onClick={() => onToggleMetricPrimary(metric.id, !isPrimarySection)}
                 title={isPrimarySection ? t.moveToSecondary : t.makePrimary}
-                className={`p-1 rounded transition ${
+                className={`p-1 rounded transition shrink-0 ${
                   isPrimarySection
                     ? 'text-amber-400/70 hover:text-amber-300'
                     : 'text-slate-500 hover:text-amber-400'
@@ -169,29 +169,21 @@ export const CompactNutrientsList: React.FC<CompactNutrientsListProps> = ({
               </button>
             )}
 
-            {/* Quick Water Controls inline */}
+            {/* Quick Water Controls inline (+250 only) */}
             {isWater && onAddWater && (
-              <div className="flex items-center gap-1 ml-1 flex-wrap">
+              <div className="flex items-center gap-1 ml-1 shrink-0">
                 <button
                   onClick={() => onAddWater?.(250)}
-                  className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/30 transition flex items-center gap-0.5 active:scale-95"
+                  className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/30 transition flex items-center gap-0.5 active:scale-95 shrink-0 whitespace-nowrap"
                   title={`+250 ${t.mlShort}`}
                 >
                   <Plus className="w-2.5 h-2.5" />
                   250
                 </button>
-                <button
-                  onClick={() => onAddWater?.(500)}
-                  className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/30 transition flex items-center gap-0.5 active:scale-95"
-                  title={`+500 ${t.mlShort}`}
-                >
-                  <Plus className="w-2.5 h-2.5" />
-                  500
-                </button>
                 {currentVal > 0 && onResetWater && (
                   <button
                     onClick={() => onResetWater?.()}
-                    className="p-1 text-slate-400 hover:text-white rounded-md hover:bg-slate-800 transition"
+                    className="p-1 text-slate-400 hover:text-white rounded-md hover:bg-slate-800 transition shrink-0"
                     title={t.reset}
                   >
                     <RotateCcw className="w-3 h-3" />

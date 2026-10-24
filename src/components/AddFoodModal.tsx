@@ -4,6 +4,7 @@ import { PRESET_FOOD_DATABASE } from '../config/defaultConfig';
 import { ThemeStyles, getBorderRadiusClass } from '../utils/themeHelper';
 import { DynamicIcon, MealCategoryIcon } from '../utils/iconHelper';
 import { X, Sparkles, Plus, Loader2, Apple } from 'lucide-react';
+import { estimateFoodWithWorker, AiQuotaError } from '../utils/accessControl';
 
 interface AddFoodModalProps {
   isOpen: boolean;
@@ -14,6 +15,8 @@ interface AddFoodModalProps {
   onSaveFood: (food: Omit<LoggedFoodItem, 'id' | 'timestamp'>) => void;
   apiKey?: string;
   libraryItems?: LibraryFoodItem[];
+  onOpenPaywallModal?: () => void;
+  onQuotaUsed?: (count: number) => void;
 }
 
 export const AddFoodModal: React.FC<AddFoodModalProps> = ({
@@ -23,8 +26,9 @@ export const AddFoodModal: React.FC<AddFoodModalProps> = ({
   themeStyles,
   initialCategoryId,
   onSaveFood,
-  apiKey,
   libraryItems = [],
+  onOpenPaywallModal,
+  onQuotaUsed,
 }) => {
   const labels = config.language.labels;
   const radiusClass = getBorderRadiusClass(config.theme.borderRadius);
@@ -103,29 +107,20 @@ export const AddFoodModal: React.FC<AddFoodModalProps> = ({
     });
   };
 
-  // AI Estimation with Gemini Flash via backend route
+  // AI Estimation via Cloudflare Worker proxy
   const handleEstimateWithGemini = async () => {
     if (!foodName.trim()) return;
     setIsEstimating(true);
     setAiNote(null);
 
     try {
-      const res = await fetch('/api/food/estimate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `${foodName} (${amountGrams} г)`,
-          metrics: config.metrics,
-          customApiKey: apiKey || undefined,
-        }),
+      const data = await estimateFoodWithWorker({
+        query: `${foodName} (${amountGrams} г)`,
+        metrics: config.metrics,
+        onOpenPaywall: onOpenPaywallModal,
+        onQuotaUsed,
       });
 
-      if (!res.ok) {
-        throw new Error('Estimation failed');
-      }
-
-      const data = await res.json();
-      // Keep user's exact foodName; do NOT overwrite it if already entered
       if (!foodName.trim() && data.name) {
         setFoodName(data.name);
       }
@@ -136,17 +131,11 @@ export const AddFoodModal: React.FC<AddFoodModalProps> = ({
         setAiNote(data.note);
       }
     } catch (e: any) {
-      // Fallback simple estimation if server route is unavailable
-      const fallbackGrams = Number(amountGramsStr) || amountGrams || 100;
-      const fallbackCal = Math.round(fallbackGrams * 1.5);
-      setNutrients((prev) => ({
-        ...prev,
-        calories: fallbackCal,
-        proteins: Math.round(fallbackGrams * 0.1),
-        fats: Math.round(fallbackGrams * 0.05),
-        carbs: Math.round(fallbackGrams * 0.18),
-      }));
-      setAiNote('Оценка выполнена на основе среднестатистической калорийности.');
+      if (e instanceof AiQuotaError) {
+        setAiNote(e.message);
+        return;
+      }
+      setAiNote(e?.message || 'Ошибка при расчёте пищевой ценности через ИИ.');
     } finally {
       setIsEstimating(false);
     }

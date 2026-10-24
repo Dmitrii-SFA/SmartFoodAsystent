@@ -24,6 +24,10 @@ import {
 } from 'lucide-react';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { getNutrientColor } from '../utils/nutrientColors';
+import {
+  estimateFoodWithWorker,
+  analyzeFoodPhotoWithWorker,
+} from '../utils/accessControl';
 
 interface FoodLibraryTabProps {
   library: LibraryFoodItem[];
@@ -32,7 +36,7 @@ interface FoodLibraryTabProps {
   themeStyles: ThemeStyles;
   accentColor: string;
   borderRadius: string;
-  apiKey: string;
+  apiKey?: string;
   langCode?: string;
   labels?: Partial<LocalizationLabels>;
   onUpdateMetrics?: (metrics: MetricConfig[]) => void;
@@ -46,6 +50,8 @@ interface FoodLibraryTabProps {
   }) => void;
   preselectedMealCategoryId?: string | null;
   onClearPreselectedMealCategory?: () => void;
+  onOpenPaywallModal?: () => void;
+  onQuotaUsed?: (count: number) => void;
 }
 
 export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
@@ -55,7 +61,6 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
   themeStyles,
   accentColor,
   borderRadius,
-  apiKey,
   langCode = 'ru',
   labels,
   onUpdateMetrics,
@@ -64,6 +69,8 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
   onAddFoodToDayLog,
   preselectedMealCategoryId,
   onClearPreselectedMealCategory,
+  onOpenPaywallModal,
+  onQuotaUsed,
 }) => {
   const radiusClass = getBorderRadiusClass(borderRadius);
   const t = getUITranslations(langCode, labels);
@@ -231,7 +238,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
     reader.readAsDataURL(file);
   };
 
-  // AI Name estimation
+  // AI Name estimation via Cloudflare Worker
   const handleEstimateByName = async () => {
     if (!formName.trim()) {
       setValidationError('Обязательно введите название продукта перед анализом ИИ!');
@@ -242,17 +249,13 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
     setAnalysisNote(null);
 
     try {
-      const res = await fetch('/api/food/estimate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `${formName.trim()} (${formServingGrams} г)`,
-          metrics,
-          customApiKey: apiKey || undefined,
-        }),
+      const data = await estimateFoodWithWorker({
+        query: `${formName.trim()} (${formServingGrams} г)`,
+        metrics,
+        onOpenPaywall: onOpenPaywallModal,
+        onQuotaUsed,
       });
 
-      const data = await res.json();
       // Keep user's exact food name; do NOT overwrite what the user entered
       if (!formName.trim() && data.name) {
         setFormName(data.name);
@@ -266,7 +269,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
     }
   };
 
-  // Photo Analysis (label or dish)
+  // Photo Analysis (label or dish) via Cloudflare Worker
   const handleAnalyzePhoto = async () => {
     if (!formName.trim()) {
       setValidationError('Обязательно введите название продукта перед анализом фотографии!');
@@ -281,23 +284,14 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
     setAnalysisNote(null);
 
     try {
-      const res = await fetch('/api/food/analyze-photo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageBase64: imagePreview,
-          mode: creationMode === 'photo_label' ? 'label' : 'dish',
-          foodName: formName.trim(),
-          customApiKey: apiKey || undefined,
-        }),
+      const data = await analyzeFoodPhotoWithWorker({
+        imageBase64: imagePreview,
+        mode: creationMode === 'photo_label' ? 'label' : 'dish',
+        foodName: formName.trim(),
+        onOpenPaywall: onOpenPaywallModal,
+        onQuotaUsed,
       });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData?.details || 'Ошибка фото-анализа');
-      }
-
-      const data = await res.json();
       if (data.servingSizeGrams) {
         setFormServingGrams(data.servingSizeGrams);
         setFormServingGramsStr(String(data.servingSizeGrams));

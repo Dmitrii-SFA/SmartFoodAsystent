@@ -297,14 +297,14 @@ export const ReorderableMealTimeline: React.FC<ReorderableMealTimelineProps> = (
                 setDraggedIdx(null);
                 setDragOverIdx(null);
               }}
-              className={`border ${themeStyles.borderColor} ${themeStyles.cardBg} ${radiusClass} p-3.5 shadow-sm flex flex-col justify-between transition-all ${
+              className={`border ${themeStyles.borderColor} ${themeStyles.cardBg} ${radiusClass} p-3.5 shadow-sm flex flex-col justify-between transition-all overflow-hidden ${
                 isBeingDragged ? 'opacity-50 scale-[0.99]' : ''
               } ${isDragOver ? 'ring-2 ring-emerald-500/70' : ''}`}
             >
               <div>
                 {/* Header */}
-                <div className="flex items-center justify-between gap-2 mb-2.5">
-                  <div className="flex items-center gap-2 min-w-0">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
                     {/* Drag Handle */}
                     <div
                       className="cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300 p-0.5 shrink-0"
@@ -315,7 +315,7 @@ export const ReorderableMealTimeline: React.FC<ReorderableMealTimelineProps> = (
                     <span className="text-xl flex items-center justify-center w-6 h-6 select-none shrink-0">
                       <MealCategoryIcon icon={category.icon} className="w-5 h-5" />
                     </span>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <h4
                           className={`text-sm font-bold leading-tight truncate ${themeStyles.textPrimary}`}
@@ -330,7 +330,7 @@ export const ReorderableMealTimeline: React.FC<ReorderableMealTimelineProps> = (
                               prev === category.id ? null : category.id
                             )
                           }
-                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[11px] font-mono tabular-nums border transition ${
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[11px] font-mono tabular-nums border transition shrink-0 ${
                             hasTime
                               ? isReminderOn
                                 ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 font-semibold'
@@ -371,7 +371,7 @@ export const ReorderableMealTimeline: React.FC<ReorderableMealTimelineProps> = (
                   </div>
 
                   {/* Right Actions: Up/Down arrows + Delete + Add Food */}
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0 ml-auto">
                     <div className="flex items-center bg-slate-900/70 rounded-lg border border-slate-800 p-0.5">
                       <button
                         type="button"

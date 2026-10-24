@@ -20,6 +20,11 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+import {
+  sendChatWithWorker,
+  getQuotaStatus,
+  AiQuotaError,
+} from '../utils/accessControl';
 
 interface AIChatDrawerProps {
   isOpen: boolean;
@@ -30,10 +35,10 @@ interface AIChatDrawerProps {
   onRevertConfig: () => void;
   canRevert: boolean;
   onAddMealsFromAI: (meals: Array<{ mealCategoryId: string; name: string; amountGrams: number; nutrients: Record<string, number> }>) => void;
-  apiKey: string;
-  demoRequestsUsed: number;
-  totalDemoLimit: number;
-  onIncrementDemoUsage: () => void;
+  apiKey?: string;
+  demoRequestsUsed?: number;
+  totalDemoLimit?: number;
+  onIncrementDemoUsage?: () => void;
   onOpenApiKeyModal: () => void;
 }
 
@@ -59,9 +64,6 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
   onRevertConfig,
   canRevert,
   onAddMealsFromAI,
-  apiKey,
-  demoRequestsUsed,
-  totalDemoLimit,
   onIncrementDemoUsage,
   onOpenApiKeyModal,
 }) => {
@@ -71,8 +73,8 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
       role: 'assistant',
       content:
         config.language.code === 'ru'
-          ? 'Привет! Я AI-ассистент на базе **Gemini 3.8 Flash**. Я управляю всем интерфейсом приложения через структуру `userConfig.json`. Вы можете попросить меня изменить любые цели КБЖУ, добавить новые витамины или микронутриенты, переключить тему, язык, категории приемов пищи или записать съеденные блюда!'
-          : "Hello! I am your AI assistant powered by **Gemini 3.8 Flash**. The whole interface is dynamically driven by `userConfig.json`. Ask me to tweak your nutrition targets, add new vitamins, change themes, switch language, or log food!",
+          ? 'Привет! Я AI-ассистент на базе **Gemini Flash**. Я управляю всем интерфейсом приложения через структуру `userConfig.json`. Вы можете попросить меня изменить любые цели КБЖУ, добавить новые витамины или микронутриенты, переключить тему, язык, категории приемов пищи или записать съеденные блюда!'
+          : "Hello! I am your AI assistant powered by **Gemini Flash**. The whole interface is dynamically driven by `userConfig.json`. Ask me to tweak your nutrition targets, add new vitamins, change themes, switch language, or log food!",
       timestamp: Date.now(),
     },
   ]);
@@ -82,8 +84,10 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const hasCustomKey = Boolean(apiKey && apiKey.trim().length > 0);
-  const remainingDemoRequests = Math.max(0, totalDemoLimit - demoRequestsUsed);
+  const quota = getQuotaStatus();
+  const hasCustomKey = quota.hasAccessKey;
+  const remainingDemoRequests = quota.remainingToday;
+  const totalDemoLimit = quota.dailyLimit;
 
   const radiusClass = getBorderRadiusClass(config.theme.borderRadius);
 
@@ -106,57 +110,21 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
 
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
-
-    // Check limit on client first if no custom key
-    if (!hasCustomKey && demoRequestsUsed >= totalDemoLimit) {
-      const limitReachedMsg: ChatMessage = {
-        id: `limit-${Date.now()}`,
-        role: 'assistant',
-        content:
-          '⚠️ Вы исчерпали лимит бесплатного демо-ассистента (10 запросов в день).\n\nЧтобы продолжить пользоваться ИИ без ограничений, пожалуйста, введите свой собственный бесплатный API-ключ Google Gemini в настройках приложения (это занимает 1 минуту).',
-        timestamp: Date.now(),
-        isLimitReached: true,
-        action: 'open_api_key_modal',
-      };
-      setMessages((prev) => [...prev, limitReachedMsg]);
-      // Trigger modal automatically as required by instruction:
-      onOpenApiKeyModal();
-      return;
-    }
-
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text,
-          currentConfig: config,
-          history: messages.map((m) => ({ role: m.role, content: m.content })),
-          customApiKey: apiKey || undefined,
-          demoRequestsUsed,
-        }),
+      const data = await sendChatWithWorker({
+        message: text,
+        currentConfig: config,
+        history: messages.map((m) => ({ role: m.role, content: m.content })),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || errorData.details || 'Chat request failed');
-      }
+      onIncrementDemoUsage?.();
+      const updatedQuota = getQuotaStatus();
 
-      const data = await response.json();
-
-      // If user does not have custom key, increment usage count
-      if (!hasCustomKey && !data.isLimitReached) {
-        onIncrementDemoUsage();
-      }
-
-      const newRemaining = Math.max(0, totalDemoLimit - (demoRequestsUsed + 1));
-
-      // Append warning if nearing limit (<= 2 requests remaining in demo mode)
       let finalMessageText = data.assistantMessage || 'Команда обработана.';
-      if (!hasCustomKey && !data.isLimitReached && newRemaining <= 2 && newRemaining > 0) {
-        finalMessageText += `\n\n⚠️ Обратите внимание: у вас осталось всего ${newRemaining} запроса в бесплатном демо-режиме. Подключите собственный бесплатный API-ключ Google Gemini в настройках, чтобы снять все ограничения.`;
+      if (!updatedQuota.hasAccessKey && !data.isLimitReached && updatedQuota.remainingToday <= 2 && updatedQuota.remainingToday > 0) {
+        finalMessageText += `\n\n⚠️ Обратите внимание: у вас осталось ${updatedQuota.remainingToday} из ${updatedQuota.dailyLimit} бесплатных запросов на сегодня.`;
       }
 
       const assistantMsg: ChatMessage = {
@@ -173,22 +141,43 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
 
       setMessages((prev) => [...prev, assistantMsg]);
 
-      // If limit reached from server, open modal automatically
       if (data.isLimitReached || data.action === 'open_api_key_modal') {
         onOpenApiKeyModal();
       } else if (data.updatedConfig) {
-        // If Gemini proposed a config update, automatically apply
         onApplyConfig(data.updatedConfig, data.summaryOfChanges);
       }
     } catch (err: any) {
-      console.error('Chat error:', err);
-      const errorMsg: ChatMessage = {
-        id: `error-${Date.now()}`,
-        role: 'assistant',
-        content: `⚠️ Произошла ошибка при обращении к Gemini: ${err.message || 'Проверьте соединение или настройки API'}.`,
-        timestamp: Date.now(),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+      if (err instanceof AiQuotaError) {
+        if (err.code === 'LIMIT_REACHED') {
+          const limitReachedMsg: ChatMessage = {
+            id: `limit-${Date.now()}`,
+            role: 'assistant',
+            content: `⚠️ ${err.message}`,
+            timestamp: Date.now(),
+            isLimitReached: true,
+            action: 'open_api_key_modal',
+          };
+          setMessages((prev) => [...prev, limitReachedMsg]);
+          onOpenApiKeyModal();
+        } else {
+          const cooldownMsg: ChatMessage = {
+            id: `cooldown-${Date.now()}`,
+            role: 'assistant',
+            content: `⏳ ${err.message}`,
+            timestamp: Date.now(),
+          };
+          setMessages((prev) => [...prev, cooldownMsg]);
+        }
+      } else {
+        console.error('Chat error:', err);
+        const errorMsg: ChatMessage = {
+          id: `error-${Date.now()}`,
+          role: 'assistant',
+          content: `⚠️ Произошла ошибка при обращении к ИИ: ${err.message || 'Проверьте интернет-соединение'}.`,
+          timestamp: Date.now(),
+        };
+        setMessages((prev) => [...prev, errorMsg]);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -242,7 +231,7 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
           </div>
 
           <div className="flex items-center gap-1">
-            {/* API Key settings button */}
+            {/* Annual Access / Paywall button */}
             <button
               onClick={onOpenApiKeyModal}
               className={`flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded-lg border transition ${
@@ -254,13 +243,13 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
               }`}
               title={
                 hasCustomKey
-                  ? 'Свой API-ключ подключен (неограниченно)'
-                  : `Демо-режим: осталось ${remainingDemoRequests} из ${totalDemoLimit} запросов`
+                  ? `Годовой доступ активен: осталось ${remainingDemoRequests} из ${totalDemoLimit} запросов сегодня`
+                  : `Пробный режим: осталось ${remainingDemoRequests} из ${totalDemoLimit} запросов сегодня`
               }
             >
               <Key className="w-3.5 h-3.5" />
               <span className="hidden sm:inline font-mono">
-                {hasCustomKey ? 'PRO' : `${remainingDemoRequests}/${totalDemoLimit}`}
+                {hasCustomKey ? `PRO ${remainingDemoRequests}/${totalDemoLimit}` : `${remainingDemoRequests}/${totalDemoLimit}`}
               </span>
             </button>
 
@@ -354,17 +343,17 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
                     <div className="p-3.5 rounded-xl border border-amber-500/50 bg-amber-950/40 text-amber-200 space-y-2.5">
                       <div className="flex items-center gap-1.5 font-bold text-amber-300">
                         <AlertTriangle className="w-4 h-4 text-amber-400" />
-                        <span>Требуется бесплатный API-ключ:</span>
+                        <span>Полный доступ на 1 год:</span>
                       </div>
                       <p className="text-[11px] text-amber-200/90 leading-relaxed">
-                        Лимит демо-режима исчерпан. Введите собственный бесплатный ключ Gemini, чтобы снять любые лимиты и продолжить работу.
+                        Неограниченная база продуктов, до 100 ИИ-сканирований и рецептов в день, поддержка BLIK и банковских карт.
                       </p>
                       <button
                         onClick={onOpenApiKeyModal}
                         className="w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-lg transition active:scale-95"
                       >
                         <Key className="w-3.5 h-3.5 text-yellow-300" />
-                        <span>Открыть настройки API-ключа</span>
+                        <span>Открыть «Годовой доступ»</span>
                       </button>
                     </div>
                   )}

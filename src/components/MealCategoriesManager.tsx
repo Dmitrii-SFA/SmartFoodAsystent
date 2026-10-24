@@ -288,9 +288,9 @@ export const MealCategoriesManager: React.FC<MealCategoriesManagerProps> = ({
                     );
                     setDraggedIdx(null);
                   }}
-                  className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800 hover:border-slate-700 transition text-xs"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2.5 sm:p-3 rounded-xl bg-slate-900/70 border border-slate-800 hover:border-slate-700 transition text-xs overflow-hidden"
                 >
-                  <div className="flex items-center gap-2 flex-1 min-w-[180px]">
+                  <div className="flex items-center gap-2 w-full sm:flex-1 min-w-0">
                     <GripVertical className="w-4 h-4 text-slate-500 cursor-grab shrink-0" />
                     <div className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-800 border border-slate-700 shrink-0">
                       <MealCategoryIcon icon={cat.icon} className="w-5 h-5" />
@@ -299,13 +299,13 @@ export const MealCategoriesManager: React.FC<MealCategoriesManagerProps> = ({
                       type="text"
                       value={catName}
                       onChange={(e) => handleChangeField(cat.id, 'name', e.target.value)}
-                      className="flex-1 min-h-[36px] px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-semibold"
+                      className="flex-1 min-w-0 min-h-[36px] px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-semibold"
                     />
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center justify-between sm:justify-end gap-1.5 w-full sm:w-auto min-w-0">
                     {/* Optional Time + Sound Reminder */}
-                    <div className="flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-lg border border-slate-700">
+                    <div className="flex items-center gap-1 bg-slate-800/80 px-1.5 py-1 rounded-lg border border-slate-700 min-w-0">
                       <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                       <input
                         type="time"
@@ -318,7 +318,7 @@ export const MealCategoriesManager: React.FC<MealCategoriesManagerProps> = ({
                             val ? (cat.reminderEnabled ?? true) : false
                           );
                         }}
-                        className="bg-transparent text-white font-mono text-[11px] focus:outline-hidden"
+                        className="w-[68px] sm:w-auto bg-transparent text-white font-mono text-[11px] focus:outline-hidden"
                       />
                       <button
                         type="button"
@@ -326,7 +326,7 @@ export const MealCategoriesManager: React.FC<MealCategoriesManagerProps> = ({
                         onClick={() =>
                           handleUpdateTimeAndReminder(cat.id, cat.time, !isReminderOn)
                         }
-                        className={`p-1 rounded transition disabled:opacity-30 ${
+                        className={`p-1 rounded transition disabled:opacity-30 shrink-0 ${
                           isReminderOn
                             ? 'text-amber-400 bg-amber-500/15'
                             : 'text-slate-400 hover:text-white'
@@ -347,7 +347,7 @@ export const MealCategoriesManager: React.FC<MealCategoriesManagerProps> = ({
                       </button>
                     </div>
 
-                    <div className="flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-lg border border-slate-700">
+                    <div className="flex items-center gap-1 bg-slate-800/80 px-1.5 py-1 rounded-lg border border-slate-700 shrink-0">
                       <span className="text-[11px] text-slate-400">
                         {isEn ? 'Share:' : isPl ? 'Udział:' : 'Доля:'}
                       </span>
@@ -363,60 +363,62 @@ export const MealCategoriesManager: React.FC<MealCategoriesManagerProps> = ({
                             Math.min(100, Math.max(5, Number(e.target.value) || 10))
                           )
                         }
-                        className="w-11 bg-transparent text-white font-bold text-right focus:outline-hidden"
+                        className="w-9 bg-transparent text-white font-bold text-right focus:outline-hidden"
                       />
                       <span className="text-[11px] text-slate-400">%</span>
                     </div>
 
-                    {/* Move Up / Down */}
-                    <div className="flex items-center bg-slate-800 rounded-lg border border-slate-700">
+                    <div className="flex items-center gap-1 shrink-0">
+                      {/* Move Up / Down */}
+                      <div className="flex items-center bg-slate-800 rounded-lg border border-slate-700">
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => handleMove(idx, -1)}
+                          className="p-1.5 text-slate-300 hover:text-white disabled:opacity-30"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === sorted.length - 1}
+                          onClick={() => handleMove(idx, 1)}
+                          className="p-1.5 text-slate-300 hover:text-white disabled:opacity-30"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Toggle Visible */}
                       <button
                         type="button"
-                        disabled={idx === 0}
-                        onClick={() => handleMove(idx, -1)}
-                        className="p-1.5 text-slate-300 hover:text-white disabled:opacity-30"
+                        onClick={() => handleToggleVisible(cat.id)}
+                        className={`p-1.5 rounded-lg border transition ${
+                          isVisible
+                            ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                            : 'bg-slate-800 border-slate-700 text-slate-500'
+                        }`}
                       >
-                        <ArrowUp className="w-3.5 h-3.5" />
+                        {isVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                       </button>
-                      <button
-                        type="button"
-                        disabled={idx === sorted.length - 1}
-                        onClick={() => handleMove(idx, 1)}
-                        className="p-1.5 text-slate-300 hover:text-white disabled:opacity-30"
-                      >
-                        <ArrowDown className="w-3.5 h-3.5" />
-                      </button>
+
+                      {/* Delete */}
+                      {sorted.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDeleteCatModal({
+                              isOpen: true,
+                              id: cat.id,
+                              name: `${getMealCategoryIconText(cat.icon)} ${catName}`,
+                            })
+                          }
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-red-950/50 border border-slate-700 hover:border-red-500/40 text-slate-400 hover:text-red-400 transition"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
-
-                    {/* Toggle Visible */}
-                    <button
-                      type="button"
-                      onClick={() => handleToggleVisible(cat.id)}
-                      className={`p-1.5 rounded-lg border transition ${
-                        isVisible
-                          ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
-                          : 'bg-slate-800 border-slate-700 text-slate-500'
-                      }`}
-                    >
-                      {isVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                    </button>
-
-                    {/* Delete */}
-                    {sorted.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDeleteCatModal({
-                            isOpen: true,
-                            id: cat.id,
-                            name: `${getMealCategoryIconText(cat.icon)} ${catName}`,
-                          })
-                        }
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-red-950/50 border border-slate-700 hover:border-red-500/40 text-slate-400 hover:text-red-400 transition"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
                   </div>
                 </div>
               );

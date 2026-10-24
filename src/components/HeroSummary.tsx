@@ -174,13 +174,18 @@ export const HeroSummary: React.FC<HeroSummaryProps> = ({
               >
                 {/* Metric Header */}
                 <div className="flex items-center justify-between gap-1 mb-1.5">
-                  <div className="flex items-center gap-1.5 truncate">
+                  <div className="flex items-center gap-1.5 min-w-0">
                     <DynamicIcon
                       name={metric.icon}
                       className="w-3.5 h-3.5 shrink-0"
                       style={{ color: metric.color }}
                     />
-                    <span className={`text-xs font-semibold truncate ${themeStyles.textPrimary}`} title={metric.label}>
+                    <span
+                      className={`text-xs font-semibold ${
+                        metric.id === 'water' ? 'shrink-0 whitespace-nowrap' : 'truncate'
+                      } ${themeStyles.textPrimary}`}
+                      title={metric.label}
+                    >
                       {metric.label}
                     </span>
                   </div>
@@ -214,15 +219,15 @@ export const HeroSummary: React.FC<HeroSummaryProps> = ({
 
                 {/* Special Quick Action for Water */}
                 {metric.id === 'water' && (
-                  <div className="mt-2 pt-1 border-t border-slate-800/80 flex items-center justify-between">
-                    <span className="text-[10px] text-cyan-400 font-medium">Стакан воды</span>
+                  <div className="mt-2 pt-1 border-t border-slate-800/80 flex items-center justify-between gap-1">
+                    <span className="text-[10px] text-cyan-400 font-medium truncate">Стакан воды</span>
                     <button
                       onClick={() => onAddWater(250)}
-                      className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-bold transition active:scale-90"
-                      title="Добавить +250 мл"
+                      className="flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-bold transition active:scale-90 shrink-0"
+                      title="+250 мл"
                     >
                       <Plus className="w-2.5 h-2.5" />
-                      250 мл
+                      250
                     </button>
                   </div>
                 )}

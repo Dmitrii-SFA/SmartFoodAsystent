@@ -53,28 +53,30 @@ import {
   PersonProfile,
 } from './types/config';
 
+import {
+  checkAndActivateUrlAccessKey,
+  getSavedAccessKey,
+  saveAccessKey,
+  getQuotaStatus,
+  TRIAL_DAILY_LIMIT,
+  ACCESS_KEY_STORAGE_KEY,
+} from './utils/accessControl';
+
 const STORAGE_KEY_SHOPPING_LIST = 'pwa_calorie_shopping_list_v1';
 
 const STORAGE_KEY_CONFIG = 'pwa_calorie_user_config_v1';
 const STORAGE_KEY_LOGS = 'pwa_calorie_day_logs_v1';
 const STORAGE_KEY_PEOPLE_PROFILES = 'pwa_calorie_people_profiles_v1';
 const STORAGE_KEY_ACTIVE_PERSON_ID = 'pwa_calorie_active_person_id_v1';
-const STORAGE_KEY_API_KEY = 'pwa_gemini_custom_api_key_v1';
+const STORAGE_KEY_API_KEY = ACCESS_KEY_STORAGE_KEY;
 const STORAGE_KEY_AI_CONFIG = 'pwa_ai_config_v1';
-const STORAGE_KEY_DEMO_REQUESTS = 'pwa_demo_requests_count_v1';
-const TOTAL_DEMO_LIMIT = 10;
+const TOTAL_DEMO_LIMIT = TRIAL_DAILY_LIMIT;
 
 export default function App() {
   const getTodayStr = () => new Date().toISOString().split('T')[0];
 
-  // API Key state (stored in localStorage)
-  const [apiKey, setApiKey] = useState<string>(() => {
-    try {
-      return localStorage.getItem(STORAGE_KEY_API_KEY) || '';
-    } catch {
-      return '';
-    }
-  });
+  // Access Key state (stored in localStorage under 'app_access_key')
+  const [apiKey, setApiKey] = useState<string>(() => getSavedAccessKey());
 
   // Locked App Icon ID for "Smart Food Assistance" (chosen by owner, non-editable by users)
   const [lockedIconId, setLockedIconId] = useState<number>(() => {
@@ -86,52 +88,20 @@ export default function App() {
     }
   });
 
-  // AI Config state (Gemini, OpenAI, OpenRouter, Custom)
-  const [aiConfig, setAiConfig] = useState<AIConfig>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_AI_CONFIG);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.warn('Failed to parse saved aiConfig', e);
-    }
-    const legacyKey = localStorage.getItem(STORAGE_KEY_API_KEY) || '';
-    return {
-      provider: 'gemini',
-      apiKey: legacyKey,
-      baseURL: 'https://generativelanguage.googleapis.com',
-      model: 'gemini-3.8-flash',
-    };
-  });
+  // Legacy AI Config state kept for type compatibility
+  const [aiConfig, setAiConfig] = useState<AIConfig>(() => ({
+    provider: 'gemini',
+    apiKey: '',
+    baseURL: 'https://api.smartfoodasystent.workers.dev',
+    model: 'gemini-3.8-flash',
+  }));
 
   const handleSaveAiConfig = (newAiConfig: AIConfig) => {
     setAiConfig(newAiConfig);
-    setApiKey(newAiConfig.apiKey || '');
-    try {
-      localStorage.setItem(STORAGE_KEY_AI_CONFIG, JSON.stringify(newAiConfig));
-      if (newAiConfig.apiKey) {
-        localStorage.setItem(STORAGE_KEY_API_KEY, newAiConfig.apiKey);
-      }
-    } catch (e) {
-      console.error('Error saving AI config:', e);
-    }
   };
 
-  // Daily demo requests counter (stored per date in localStorage)
-  const [demoRequestsUsed, setDemoRequestsUsed] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_DEMO_REQUESTS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const today = new Date().toISOString().split('T')[0];
-        if (parsed.date === today) {
-          return Number(parsed.count) || 0;
-        }
-      }
-    } catch {
-      // fallback
-    }
-    return 0;
-  });
+  // Daily quota requests counter synced with accessControl
+  const [demoRequestsUsed, setDemoRequestsUsed] = useState<number>(() => getQuotaStatus().usedToday);
 
   // Load User Config from localStorage or fallback
   const [config, setConfig] = useState<UserConfig>(() => {
@@ -814,31 +784,42 @@ export default function App() {
     }, 4000);
   };
 
-  // Save API Key to localStorage
+  // Auto-activate Access Key from URL (?key=...) on initial load
+  useEffect(() => {
+    const activatedKey = checkAndActivateUrlAccessKey();
+    if (activatedKey) {
+      setApiKey(activatedKey);
+      setDemoRequestsUsed(getQuotaStatus().usedToday);
+      setConfigToast({
+        message: 'Годовой доступ успешно активирован!',
+        visible: true,
+      });
+      setTimeout(() => {
+        setConfigToast((prev) => ({ ...prev, visible: false }));
+      }, 4500);
+    }
+  }, []);
+
+  // Save Access Key to localStorage ('app_access_key')
   const handleSaveApiKey = (newKey: string) => {
-    setApiKey(newKey);
-    try {
-      localStorage.setItem(STORAGE_KEY_API_KEY, newKey);
-    } catch (e) {
-      console.error('Error saving API key:', e);
+    const trimmed = (newKey || '').trim();
+    saveAccessKey(trimmed);
+    setApiKey(trimmed);
+    setDemoRequestsUsed(getQuotaStatus().usedToday);
+    if (trimmed) {
+      setConfigToast({
+        message: 'Годовой доступ успешно активирован!',
+        visible: true,
+      });
+      setTimeout(() => {
+        setConfigToast((prev) => ({ ...prev, visible: false }));
+      }, 4000);
     }
   };
 
-  // Increment demo usage counter
+  // Refresh quota usage state
   const handleIncrementDemoUsage = () => {
-    setDemoRequestsUsed((prev) => {
-      const nextCount = prev + 1;
-      try {
-        const today = new Date().toISOString().split('T')[0];
-        localStorage.setItem(
-          STORAGE_KEY_DEMO_REQUESTS,
-          JSON.stringify({ date: today, count: nextCount })
-        );
-      } catch (e) {
-        console.error('Error saving demo usage:', e);
-      }
-      return nextCount;
-    });
+    setDemoRequestsUsed(getQuotaStatus().usedToday);
   };
 
   // Sync config to localStorage
@@ -859,10 +840,9 @@ export default function App() {
     }
   }, [logs]);
 
-  // Calculate remaining demo requests
-  const remainingDemoRequests = Boolean(apiKey && apiKey.trim().length > 0)
-    ? 9999
-    : Math.max(0, TOTAL_DEMO_LIMIT - demoRequestsUsed);
+  // Calculate remaining daily requests based on active access key
+  const quotaStatus = getQuotaStatus();
+  const remainingDemoRequests = quotaStatus.remainingToday;
 
   // Ensure current day exists in logs
   const currentDayLog: DayLog = logs[currentDateStr] || {
@@ -1666,6 +1646,8 @@ export default function App() {
               accentColor={config.theme.accentColor}
               borderRadius={config.theme.borderRadius}
               apiKey={apiKey}
+              onOpenPaywallModal={() => setIsApiKeyModalOpen(true)}
+              onQuotaUsed={handleIncrementDemoUsage}
               langCode={config.language.code}
               labels={config.language.labels}
               preselectedMealCategoryId={preselectedMealCategoryId}
@@ -1713,6 +1695,8 @@ export default function App() {
               labels={config.language.labels}
               apiKey={apiKey}
               aiConfig={(config as any).aiConfig}
+              onOpenPaywallModal={() => setIsApiKeyModalOpen(true)}
+              onQuotaUsed={handleIncrementDemoUsage}
               onSaveRecipe={(savedRecipe) => {
                 const isExisting = recipes.some((r) => r.id === savedRecipe.id);
                 setRecipes((prev) =>
@@ -2018,6 +2002,8 @@ export default function App() {
         initialCategoryId={addFoodInitialCatId}
         onSaveFood={handleSaveFood}
         apiKey={apiKey}
+        onOpenPaywallModal={() => setIsApiKeyModalOpen(true)}
+        onQuotaUsed={handleIncrementDemoUsage}
         libraryItems={library}
       />
 
@@ -2031,7 +2017,7 @@ export default function App() {
         onResetToDefault={() => handleApplyConfig(DEFAULT_USER_CONFIG, 'Сброшено к заводским настройкам')}
       />
 
-      {/* AI Provider & API Key Settings Modal */}
+      {/* Annual Access & Paywall Modal («Годовой доступ») */}
       <ApiKeyModal
         isOpen={isApiKeyModalOpen}
         onClose={() => setIsApiKeyModalOpen(false)}
@@ -2041,7 +2027,7 @@ export default function App() {
         onSaveApiKey={handleSaveApiKey}
         themeStyles={themeStyles}
         remainingDemoRequests={remainingDemoRequests}
-        totalDemoLimit={TOTAL_DEMO_LIMIT}
+        totalDemoLimit={quotaStatus.dailyLimit}
       />
 
       {/* Reset to Factory Defaults Modal */}

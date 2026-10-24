@@ -53,7 +53,6 @@ import {
 import { SoundMelodyId, SoundSettingsConfig } from '../types/config';
 
 export type SettingsSectionId =
-  | 'apiKey'
   | 'language'
   | 'dailyNorm'
   | 'mealCategories'
@@ -200,7 +199,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
   // Independent collapsible sections state (all collapsed by default as requested)
   const [openSections, setOpenSections] = useState<Record<SettingsSectionId, boolean>>({
-    apiKey: false,
     language: false,
     dailyNorm: false,
     mealCategories: false,
@@ -280,9 +278,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   };
 
   const openCount = Object.values(openSections).filter(Boolean).length;
-  const hasCustomApiKey = Boolean(
-    (aiConfig?.apiKey || apiKey) && (aiConfig?.apiKey || apiKey).trim().length > 0
-  );
 
   // Build Export Payload (exact same structure as Share buttons on Recipe & Daily Menu)
   const buildExportPayload = () => {
@@ -460,7 +455,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             {t.settingsSectionsTitle}
           </span>
           <span className="text-[11px] font-mono tabular-nums px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 shrink-0">
-            {openCount} {t.openCountOfTotal} 10
+            {openCount} {t.openCountOfTotal} 9
           </span>
         </div>
 
@@ -471,131 +466,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           themeStyles={themeStyles}
           borderRadius={config.theme.borderRadius}
         />
-      </div>
-
-      {/* 1. ИИ-провайдер и API-ключ (Gemini, OpenRouter, ChatGPT) и PWA */}
-      <div
-        className={`border ${themeStyles.borderColor} ${themeStyles.cardBg} ${radiusClass} p-4 sm:p-5 shadow-sm transition-all ${
-          openSections.apiKey ? 'space-y-4' : 'space-y-0'
-        }`}
-      >
-        <div
-          onClick={() => toggleSection('apiKey')}
-          className="flex items-start justify-between gap-3 cursor-pointer select-none group"
-        >
-          <div className="flex items-start gap-3 min-w-0 flex-1">
-            <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0 mt-0.5">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div className="min-w-0 flex-1 space-y-1">
-              <h4
-                className={`text-sm sm:text-base font-bold leading-snug break-words ${themeStyles.textPrimary} group-hover:text-purple-400 transition-colors`}
-              >
-                {t.secAiProvider}
-              </h4>
-              <p className="text-xs leading-relaxed text-slate-400 break-words">
-                {t.secAiProviderSub}
-              </p>
-              <div className="pt-1">
-                <span
-                  className={`inline-flex items-center text-[11px] font-mono tabular-nums font-bold px-2.5 py-0.5 rounded-lg ${
-                    hasCustomApiKey
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                  }`}
-                >
-                  {hasCustomApiKey
-                    ? `${aiConfig?.provider || 'Gemini'} • ${aiConfig?.model || 'PRO'}`
-                    : `${isEn ? 'Demo' : isPl ? 'Demo' : 'Демо'} (${remainingDemoRequests}/${totalDemoLimit})`}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-1.5 rounded-lg text-slate-400 group-hover:text-white transition shrink-0">
-            <ChevronDown
-              className={`w-4 h-4 transition-transform duration-200 ${
-                openSections.apiKey ? 'rotate-180' : ''
-              }`}
-            />
-          </div>
-        </div>
-
-        {openSections.apiKey && (
-          <div className="space-y-3 pt-3.5 border-t border-slate-800/80 animate-in fade-in duration-150">
-            <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
-              <div>
-                <span className="text-slate-400">
-                  {isEn
-                    ? 'Active provider: '
-                    : isPl
-                    ? 'Aktywny dostawca: '
-                    : 'Активный провайдер: '}
-                </span>
-                <span className="font-bold text-white capitalize">
-                  {aiConfig?.provider || 'Google Gemini'}
-                </span>
-                <span className="text-slate-500 font-mono text-[11px] ml-2">
-                  ({aiConfig?.model || 'gemini-3.8-flash'})
-                </span>
-              </div>
-              <span className="text-[11px] text-emerald-400/90 font-mono">
-                {isEn
-                  ? 'Server-side proxy (no CORS)'
-                  : isPl
-                  ? 'Wykonywane na serwerze bez CORS'
-                  : 'Выполняется на сервере без CORS'}
-              </span>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={onOpenApiKeyModal}
-                  className="min-h-[40px] flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl border border-purple-500/40 bg-purple-950/40 hover:bg-purple-900/50 text-purple-200 transition active:scale-95"
-                >
-                  <Key className="w-3.5 h-3.5 text-purple-300 shrink-0" />
-                  <span>
-                    {hasCustomApiKey
-                      ? isEn
-                        ? 'Configure AI (Gemini, OpenAI, OpenRouter)'
-                        : isPl
-                        ? 'Konfiguruj AI (Gemini, OpenAI, OpenRouter)'
-                        : 'Настроить ИИ (Gemini, OpenAI, OpenRouter)'
-                      : isEn
-                      ? 'Connect your own AI API key'
-                      : isPl
-                      ? 'Podłącz własny klucz API AI'
-                      : 'Подключить свой API-ключ ИИ'}
-                  </span>
-                </button>
-
-                {onOpenAiChat && (
-                  <button
-                    type="button"
-                    onClick={onOpenAiChat}
-                    className="min-h-[40px] flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition active:scale-95"
-                  >
-                    <Bot className="w-3.5 h-3.5 shrink-0" />
-                    <span>
-                      {isEn
-                        ? 'Open AI Assistant Chat'
-                        : isPl
-                        ? 'Otwórz czat z asystentem AI'
-                        : 'Открыть чат с ассистентом'}
-                    </span>
-                  </button>
-                )}
-              </div>
-
-              <PWAInstallButton
-                label={isEn ? 'Install PWA' : isPl ? 'Zainstaluj PWA' : 'Установить PWA'}
-                accentColor={config.theme.accentColor}
-              />
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 2. Язык интерфейса */}

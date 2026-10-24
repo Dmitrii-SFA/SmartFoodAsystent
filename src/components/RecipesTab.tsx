@@ -53,6 +53,7 @@ import {
   getVesselDisplayIcon,
   getVesselDisplayName,
 } from '../utils/culinaryPhysics';
+import { generateRecipeWithWorker } from '../utils/accessControl';
 
 interface RecipesTabProps {
   recipes: RecipeItem[];
@@ -79,6 +80,8 @@ interface RecipesTabProps {
     libraryItems?: LibraryFoodItem[];
     dayLogs?: Record<string, DayLog>;
   }) => void;
+  onOpenPaywallModal?: () => void;
+  onQuotaUsed?: (count: number) => void;
 }
 
 export const RecipesTab: React.FC<RecipesTabProps> = ({
@@ -98,6 +101,8 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
   onLogRecipeToDay,
   onAddToShoppingList,
   onShareRecipe,
+  onOpenPaywallModal,
+  onQuotaUsed,
 }) => {
   const radiusClass = getBorderRadiusClass(borderRadius);
   const t = getUITranslations(langCode, labels);
@@ -374,23 +379,18 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
     setAiRecipeSuccessBanner(null);
 
     try {
-      const response = await fetch('/api/recipes/generate-ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dishName: targetDish,
-          library: enrichedLibrary.map((f) => ({ id: f.id, name: f.name })),
-          metrics: metrics || [],
-          aiConfig,
-        }),
+      const gen = await generateRecipeWithWorker({
+        dishName: targetDish,
+        library: enrichedLibrary.map((f) => ({ id: f.id, name: f.name })),
+        metrics: metrics || [],
+        onOpenPaywall: onOpenPaywallModal,
+        onQuotaUsed,
       });
 
-      const data = await response.json();
-      if (!response.ok || !data?.recipe) {
-        throw new Error(data?.error || 'Не удалось сгенерировать рецепт');
+      if (!gen || typeof gen !== 'object') {
+        throw new Error('Не удалось сгенерировать рецепт');
       }
 
-      const gen = data.recipe;
       const generatedTitle = (gen.name && String(gen.name).trim()) || targetDish;
       setRecipeName(generatedTitle);
       setAiDishPrompt(generatedTitle);
@@ -1670,6 +1670,8 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
                     onUpdateProcessConfig={setCookingProcessConfig}
                     sessionAiCreatedFoodIds={sessionAiCreatedFoodIds}
                     onRemoveAiCreatedFoodFromLibrary={handlePurgeAiCreatedFoodFromLibrary}
+                    onOpenPaywallModal={onOpenPaywallModal}
+                    onQuotaUsed={onQuotaUsed}
                   />
                 </div>
               ) : creationMode === 'simple' ? (
