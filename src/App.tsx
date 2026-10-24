@@ -93,7 +93,7 @@ export default function App() {
     provider: 'gemini',
     apiKey: '',
     baseURL: 'https://api.smartfoodasystent.workers.dev',
-    model: 'gemini-3.5-flash-lite',
+    model: 'gemini-3.8-flash',
   }));
 
   const handleSaveAiConfig = (newAiConfig: AIConfig) => {
