@@ -1,6 +1,6 @@
 {
-  "summary":  "План устранения ошибки 405 Method Not Allowed в Cloudflare (добавление worker.js и wrangler.toml с приоритетом воркера над статикой и поддержкой CORS/POST) и перевода приложения на модель Gemini 3.5 Flash-Lite с автоматическим фоллбэком в воркере.",
-  "updatedAt":  "2026-10-24T15:52:07.987852134Z",
+  "summary":  "План подготовки приложения к размещению и открытию напрямую в Cloudflare с использованием секретного ключа GEMINI_API_KEY из окружения Cloudflare, устранением ошибки 405 Method Not Allowed и настройкой цепочки моделей Gemini 3.5 Flash-Lite -> Gemini 3.1 Flash-Lite -> Gemini 2.5 Flash-Lite -> Gemini 2.5 Flash -> Gemini Flash Latest.",
+  "updatedAt":  "2026-10-24T16:23:23.746929301Z",
   "requestFeedback":  true,
   "userFacing":  true
 }
