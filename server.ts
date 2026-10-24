@@ -1060,6 +1060,85 @@ app.post('/api/app-icon', (req: Request, res: Response) => {
   }
 });
 
+// Local / Hybrid fallback endpoint matching Cloudflare Worker (worker.js)
+app.post('/api/worker', async (req: Request, res: Response) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      res.status(500).json({
+        error: { message: 'GEMINI_API_KEY не настроен на сервере.' },
+      });
+      return;
+    }
+
+    const requestBody = req.body || {};
+    const requestedModel =
+      typeof requestBody.model === 'string' && requestBody.model.trim()
+        ? requestBody.model.trim()
+        : 'gemini-3.5-flash-lite';
+
+    const fallbackModels = [
+      'gemini-3.5-flash-lite',
+      'gemini-3.1-flash-lite',
+      'gemini-2.5-flash-lite',
+      'gemini-flash-latest',
+    ];
+    const modelsToTry = [
+      requestedModel,
+      ...fallbackModels.filter((m) => m !== requestedModel),
+    ];
+
+    const geminiPayload: Record<string, any> = {
+      contents: requestBody.contents || [],
+    };
+    if (requestBody.generationConfig) {
+      geminiPayload.generationConfig = requestBody.generationConfig;
+    }
+    if (requestBody.systemInstruction) {
+      geminiPayload.systemInstruction =
+        typeof requestBody.systemInstruction === 'string'
+          ? { parts: [{ text: requestBody.systemInstruction }] }
+          : requestBody.systemInstruction;
+    }
+
+    let lastData: any = null;
+    let lastStatus = 500;
+
+    for (const modelName of modelsToTry) {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+        modelName
+      )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+      const upstreamRes = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(geminiPayload),
+      });
+
+      lastStatus = upstreamRes.status;
+      try {
+        lastData = await upstreamRes.json();
+      } catch {
+        lastData = { error: { message: `Upstream error (${upstreamRes.status})` } };
+      }
+
+      if (upstreamRes.ok) {
+        res.status(200).json({ ...lastData, modelUsed: modelName });
+        return;
+      }
+
+      if (upstreamRes.status === 404 || upstreamRes.status === 400) {
+        continue;
+      }
+      break;
+    }
+
+    res.status(lastStatus).json(lastData || { error: { message: 'Ошибка Gemini API' } });
+  } catch (err: any) {
+    res.status(500).json({ error: { message: err?.message || 'Internal Worker Proxy Error' } });
+  }
+});
+
 async function startServer() {
   const httpServer = http.createServer(app);
 

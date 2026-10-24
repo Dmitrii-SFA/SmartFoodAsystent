@@ -73,8 +73,8 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
       role: 'assistant',
       content:
         config.language.code === 'ru'
-          ? 'Привет! Я AI-ассистент на базе **Gemini Flash**. Я управляю всем интерфейсом приложения через структуру `userConfig.json`. Вы можете попросить меня изменить любые цели КБЖУ, добавить новые витамины или микронутриенты, переключить тему, язык, категории приемов пищи или записать съеденные блюда!'
-          : "Hello! I am your AI assistant powered by **Gemini Flash**. The whole interface is dynamically driven by `userConfig.json`. Ask me to tweak your nutrition targets, add new vitamins, change themes, switch language, or log food!",
+          ? 'Привет! Я AI-ассистент на базе **Gemini 3.5 Flash-Lite**. Я управляю всем интерфейсом приложения через структуру `userConfig.json`. Вы можете попросить меня изменить любые цели КБЖУ, добавить новые витамины или микронутриенты, переключить тему, язык, категории приемов пищи или записать съеденные блюда!'
+          : "Hello! I am your AI assistant powered by **Gemini 3.5 Flash-Lite**. The whole interface is dynamically driven by `userConfig.json`. Ask me to tweak your nutrition targets, add new vitamins, change themes, switch language, or log food!",
       timestamp: Date.now(),
     },
   ]);
@@ -219,9 +219,9 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-                <span>Gemini Flash</span>
+                <span>Gemini 3.5 Flash-Lite</span>
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  gemini-3.8-flash
+                  gemini-3.5-flash-lite
                 </span>
               </h3>
               <p className="text-[10px] text-slate-400">

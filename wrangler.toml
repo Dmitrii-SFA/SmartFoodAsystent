@@ -1,0 +1,13 @@
+name = "api"
+main = "worker.js"
+compatibility_date = "2025-02-01"
+
+# Prioritize Worker execution before static assets so POST requests
+# never hit the static asset server with 405 Method Not Allowed.
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+run_worker_first = true
+
+[vars]
+DEFAULT_MODEL = "gemini-3.5-flash-lite"

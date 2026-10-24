@@ -12,7 +12,7 @@ import { GoogleGenAI } from '@google/genai';
  */
 
 export const DEFAULT_MODELS = {
-  gemini: 'gemini-3.8-flash',
+  gemini: 'gemini-3.5-flash-lite',
   openai: 'gpt-4o-mini',
   openrouter: 'meta-llama/llama-3.3-70b-instruct',
   custom: 'gpt-4o-mini',
