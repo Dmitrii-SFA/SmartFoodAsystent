@@ -92,7 +92,7 @@ export default function App() {
   const [aiConfig, setAiConfig] = useState<AIConfig>(() => ({
     provider: 'gemini',
     apiKey: '',
-    baseURL: 'https://api.smartfoodasystent.workers.dev',
+    baseURL: 'https://api.smartfoodasystent.workers.dev/api',
     model: 'gemini-3.8-flash',
   }));
 

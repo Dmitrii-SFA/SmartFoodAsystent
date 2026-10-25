@@ -1,6 +1,6 @@
 import { MetricConfig, UserConfig } from '../types/config';
 
-export const CLOUDFLARE_WORKER_URL = 'https://api.smartfoodasystent.workers.dev';
+export const CLOUDFLARE_WORKER_URL = 'https://api.smartfoodasystent.workers.dev/api';
 export const STRIPE_PAYMENT_URL = 'https://buy.stripe.com/test_placeholder';
 export const ACCESS_KEY_STORAGE_KEY = 'app_access_key';
 
