@@ -1,6 +1,6 @@
 {
-  "summary":  "План устранения ошибки HTTP 405 (Method Not Allowed) при развертывании на Cloudflare (Workers и Pages) и настройки надежной маршрутизации ИИ-запросов с фоллбэком.",
-  "updatedAt":  "2026-10-25T12:02:47.130675018Z",
+  "summary":  "План точечной замены идентификатора модели gemini-2.5-flash-lite на gemini-3.5-flash-lite во всех серверных обработчиках ИИ-прокси.",
+  "updatedAt":  "2026-10-25T12:41:50.540062685Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

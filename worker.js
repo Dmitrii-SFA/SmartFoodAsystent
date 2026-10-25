@@ -49,7 +49,7 @@ export default {
           );
         }
 
-        const targetModel = requestData.model || "gemini-2.5-flash-lite";
+        const targetModel = requestData.model || "gemini-3.5-flash-lite";
         const googleUrl = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
 
         const geminiPayload = {
