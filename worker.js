@@ -1,7 +1,7 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, x-access-token, x-device-id",
+  "Access-Control-Allow-Headers": "Content-Type, x-access-token, x-access-key, x-device-id",
   "Access-Control-Expose-Headers": "x-remaining-requests, x-is-master, x-storage-mode",
 };
 
@@ -10,22 +10,32 @@ const MAX_DEVICES_PER_KEY = 2;
 const MIN_REQUEST_INTERVAL_MS = 9500; // ~10s anti-double-click protection (with 500ms network tolerance)
 const MAX_REQUESTS_PER_MINUTE = 3;
 
-// Fallback in-memory stores when Cloudflare KV is not yet bound
+// Fallback in-memory stores when Cloudflare KV (env.USERS_KV) is temporarily not bound
 const memoryRateLimits = new Map();
 const memoryKeyDevices = new Map();
 
 function parseAllowedKeys(raw) {
   if (!raw || typeof raw !== "string") return [];
   return raw
-    .split(/[\s,;]+/)
+    .split(/[,;\n\r]+/)
     .map((k) => k.trim())
     .filter(Boolean);
 }
 
 function getKvNamespace(env) {
   if (!env || typeof env !== "object") return null;
-  const candidate = env.KEYS_KV || env.QUOTA_KV || env.AI_QUOTA_KV || env.KV || null;
-  if (candidate && typeof candidate.get === "function" && typeof candidate.put === "function") {
+  const candidate =
+    env.USERS_KV ||
+    env.KEYS_KV ||
+    env.QUOTA_KV ||
+    env.AI_QUOTA_KV ||
+    env.KV ||
+    null;
+  if (
+    candidate &&
+    typeof candidate.get === "function" &&
+    typeof candidate.put === "function"
+  ) {
     return candidate;
   }
   return null;
@@ -74,11 +84,19 @@ function rollbackLastRateLimitTimestamp(clientKey) {
   }
 }
 
-async function verifyAndLoadKeyState({ accessKey, deviceId, env, registerDevice = true }) {
+async function verifyAndLoadKeyState({
+  accessKey,
+  deviceId,
+  env,
+  registerDevice = true,
+}) {
   const cleanKey = (accessKey || "").trim();
   const cleanDevice = (deviceId || "").trim();
-  const masterKey = (env?.MASTER_KEY || env?.OWNER_MASTER_KEY || "").trim();
+  const masterKey =
+    typeof env?.MASTER_KEY === "string" ? env.MASTER_KEY.trim() : "";
 
+  // 1. Мастер-ключ из env.MASTER_KEY проверяется в первую очередь
+  // и даёт полный обход любых лимитов, привязок устройств и списаний.
   if (masterKey && cleanKey === masterKey) {
     return {
       ok: true,
@@ -90,39 +108,84 @@ async function verifyAndLoadKeyState({ accessKey, deviceId, env, registerDevice 
     };
   }
 
-  const allowedKeysRaw = env?.ALLOWED_KEYS || env?.ACCESS_KEYS || env?.VALID_KEYS || "";
+  // 2. Проверка ключа по списку разрешённых базовых ключей (env.ALLOWED_KEYS)
+  const allowedKeysRaw =
+    typeof env?.ALLOWED_KEYS === "string" ? env.ALLOWED_KEYS : "";
   const allowedKeys = parseAllowedKeys(allowedKeysRaw);
-
-  // If ALLOWED_KEYS is configured on the server, strictly verify that the key is in the list
-  if (allowedKeys.length > 0 && !allowedKeys.includes(cleanKey)) {
-    return {
-      ok: false,
-      status: 403,
-      code: "INVALID_KEY",
-      error: "Неверный ключ активации. Проверьте правильность введённого ключа.",
-    };
-  }
+  const isInAllowedKeys = allowedKeys.includes(cleanKey);
 
   const kv = getKvNamespace(env);
 
-  // If KV storage is connected, track device bindings (max 2) and 500-request balance in KV
+  // Если ключ не входит в ALLOWED_KEYS (и на сервере настроены ALLOWED_KEYS или MASTER_KEY),
+  // проверяем, нет ли его уже в USERS_KV; если нет — отклоняем как неверный ключ.
+  if (!isInAllowedKeys && (allowedKeys.length > 0 || Boolean(masterKey))) {
+    let existsInKv = false;
+    if (kv && cleanKey) {
+      try {
+        const existingRecord =
+          (await kv.get(cleanKey, "json")) ||
+          (await kv.get(`key_v1:${cleanKey}`, "json"));
+        if (existingRecord && typeof existingRecord === "object") {
+          existsInKv = true;
+        }
+      } catch {
+        // Игнорируем ошибку чтения KV при проверке
+      }
+    }
+
+    if (!existsInKv) {
+      return {
+        ok: false,
+        status: 403,
+        code: "INVALID_KEY",
+        error:
+          "Неверный ключ активации. Проверьте правильность введённого ключа.",
+      };
+    }
+  }
+
+  // 3. Работа с серверным хранилищем env.USERS_KV (динамический учёт 500 запросов и привязка до 2 устройств)
   if (kv) {
     try {
-      const storageKey = `key_v1:${cleanKey}`;
+      let storageKey = cleanKey;
       let record = await kv.get(storageKey, "json");
+
+      // Поддержка записей со старым префиксом key_v1:, если они уже были созданы
+      if (!record || typeof record !== "object") {
+        const legacyRecord = await kv.get(`key_v1:${cleanKey}`, "json");
+        if (legacyRecord && typeof legacyRecord === "object") {
+          record = legacyRecord;
+        }
+      }
+
+      let needsSave = false;
+
       if (!record || typeof record !== "object") {
         record = {
           remaining: PACKAGE_REQUESTS_LIMIT,
+          total: PACKAGE_REQUESTS_LIMIT,
+          used: 0,
           devices: [],
           createdAt: Date.now(),
+          updatedAt: Date.now(),
         };
+        needsSave = true;
       }
 
-      if (!Array.isArray(record.devices)) record.devices = [];
-      if (typeof record.remaining !== "number" || Number.isNaN(record.remaining)) {
+      if (!Array.isArray(record.devices)) {
+        record.devices = [];
+        needsSave = true;
+      }
+
+      if (
+        typeof record.remaining !== "number" ||
+        Number.isNaN(record.remaining)
+      ) {
         record.remaining = PACKAGE_REQUESTS_LIMIT;
+        needsSave = true;
       }
 
+      // Привязка устройства (максимум 2 устройства на 1 ключ)
       if (cleanDevice) {
         if (!record.devices.includes(cleanDevice)) {
           if (record.devices.length >= MAX_DEVICES_PER_KEY) {
@@ -135,9 +198,15 @@ async function verifyAndLoadKeyState({ accessKey, deviceId, env, registerDevice 
           }
           if (registerDevice) {
             record.devices.push(cleanDevice);
-            await kv.put(storageKey, JSON.stringify(record));
+            record.updatedAt = Date.now();
+            needsSave = true;
           }
         }
+      }
+
+      // Сохраняем запись в env.USERS_KV при первой активации пакета 500 запросов или привязке нового устройства
+      if (needsSave && registerDevice) {
+        await kv.put(storageKey, JSON.stringify(record));
       }
 
       if (record.remaining <= 0) {
@@ -146,7 +215,8 @@ async function verifyAndLoadKeyState({ accessKey, deviceId, env, registerDevice 
           status: 402,
           code: "KEY_EXHAUSTED",
           remainingRequests: 0,
-          error: "Лимит в 500 ИИ-запросов по этому ключу исчерпан. Пожалуйста, приобретите новый пакет и введите новый ключ активации.",
+          error:
+            "Лимит в 500 ИИ-запросов по этому ключу исчерпан. Пожалуйста, приобретите новый пакет и введите новый ключ активации.",
         };
       }
 
@@ -162,12 +232,16 @@ async function verifyAndLoadKeyState({ accessKey, deviceId, env, registerDevice 
         record,
       };
     } catch (kvErr) {
-      // Graceful fallback if KV throws an unexpected error
-      console.warn("KV access error, falling back to client balance tracking:", kvErr);
+      // Если KV-хранилище временно выдало ошибку, код не падает
+      console.warn(
+        "USERS_KV access error, falling back to in-memory/client balance tracking:",
+        kvErr
+      );
     }
   }
 
-  // Fallback when KV is not bound yet: check device limit in isolate memory without crashing
+  // 4. Fallback, если env.USERS_KV временно не настроено:
+  // проверка по MASTER_KEY и ALLOWED_KEYS уже выполнена выше, код не падает
   if (cleanDevice) {
     const knownDevices = memoryKeyDevices.get(cleanKey) || [];
     if (!knownDevices.includes(cleanDevice)) {
@@ -217,6 +291,7 @@ export default {
         JSON.stringify({
           status: "ok",
           service: "Smart Food Assistance AI Worker",
+          kvBound: Boolean(getKvNamespace(env)),
         }),
         {
           status: 200,
@@ -225,27 +300,44 @@ export default {
       );
     }
 
-    // Перехватываем все POST-запросы к ИИ (на /api, /api/* или корень)
-    if (request.method === "POST" || pathname === "/api" || pathname.startsWith("/api/")) {
+    // Перехватываем все POST-запросы к ИИ и проверке ключей (на /api, /api/* или корень)
+    if (
+      request.method === "POST" ||
+      pathname === "/api" ||
+      pathname.startsWith("/api/")
+    ) {
       let clientRateKey = "";
       let recordedRateLimit = false;
 
       try {
         const requestData = await request.json();
-        const headerKey = request.headers.get("x-access-token") || "";
+        const headerKey =
+          request.headers.get("x-access-token") ||
+          request.headers.get("x-access-key") ||
+          "";
         const headerDevice = request.headers.get("x-device-id") || "";
         const accessKey = (headerKey || requestData.accessKey || "").trim();
         const deviceId = (headerDevice || requestData.deviceId || "").trim();
         const clientIp = request.headers.get("cf-connecting-ip") || "anon";
 
         // 1. Проверка и активация ключа без вызова ИИ (action === "verify_key")
-        if (requestData.action === "verify_key" || pathname === "/api/verify-key") {
+        if (
+          requestData.action === "verify_key" ||
+          pathname === "/api/verify-key"
+        ) {
           if (!accessKey) {
             return new Response(
-              JSON.stringify({ error: "Введите ключ активации", code: "EMPTY_KEY" }),
+              JSON.stringify({
+                valid: false,
+                error: "Введите ключ активации",
+                code: "EMPTY_KEY",
+              }),
               {
                 status: 400,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                headers: {
+                  ...corsHeaders,
+                  "Content-Type": "application/json",
+                },
               }
             );
           }
@@ -267,7 +359,10 @@ export default {
               }),
               {
                 status: verification.status || 403,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                headers: {
+                  ...corsHeaders,
+                  "Content-Type": "application/json",
+                },
               }
             );
           }
@@ -288,7 +383,7 @@ export default {
           );
         }
 
-        // 2. Если передан ключ доступа — проверяем валидность, привязку к устройствам и баланс
+        // 2. Если пользователь передал ключ доступа — проверяем MASTER_KEY, ALLOWED_KEYS, привязку устройств и баланс в USERS_KV
         let keyContext = null;
         if (accessKey) {
           keyContext = await verifyAndLoadKeyState({
@@ -307,7 +402,10 @@ export default {
               }),
               {
                 status: keyContext.status || 403,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                headers: {
+                  ...corsHeaders,
+                  "Content-Type": "application/json",
+                },
               }
             );
           }
@@ -316,6 +414,7 @@ export default {
         const isMaster = Boolean(keyContext && keyContext.isMaster);
 
         // 3. Проверка минутного лимита (3 запроса/мин) и защиты от двойного нажатия (10 сек)
+        // Для владельца с env.MASTER_KEY любые лимиты полностью отключены
         if (!isMaster) {
           clientRateKey = deviceId || accessKey || clientIp;
           const rateCheck = checkRateLimit(clientRateKey);
@@ -328,19 +427,24 @@ export default {
               }),
               {
                 status: 429,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                headers: {
+                  ...corsHeaders,
+                  "Content-Type": "application/json",
+                },
               }
             );
           }
           recordedRateLimit = true;
         }
 
-        // 4. Запрос к модели ИИ
-        const apiKey = env.GEMINI_API_KEY;
+        // 4. Запрос к Google Gemini через env.GEMINI_API_KEY
+        const apiKey = env?.GEMINI_API_KEY;
         if (!apiKey) {
           if (recordedRateLimit) rollbackLastRateLimitTimestamp(clientRateKey);
           return new Response(
-            JSON.stringify({ error: "GEMINI_API_KEY не найден в Secrets" }),
+            JSON.stringify({
+              error: "GEMINI_API_KEY не найден в настройках воркера (env.GEMINI_API_KEY)",
+            }),
             {
               status: 500,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -366,9 +470,9 @@ export default {
 
         const result = await geminiResponse.json();
 
-        // Проверяем, что ответ от нейросети успешный и содержит корректный текст
+        // Проверяем, что ответ от Gemini успешный (статус 200) и содержит корректный текст
         const hasValidCandidate = Boolean(
-          geminiResponse.ok &&
+          geminiResponse.status === 200 &&
             result &&
             !result.error &&
             result.candidates &&
@@ -383,20 +487,29 @@ export default {
           });
         }
 
-        // 5. Списываем 1 запрос ТОЛЬКО при успешном и корректном ответе от ИИ
+        // 5. При успешном ответе от Gemini (статус 200) списываем 1 запрос с баланса ключа в env.USERS_KV
+        // и возвращаем актуальный остаток на клиент
         let updatedRemaining = null;
         let storageMode = keyContext ? keyContext.storageMode : "starter";
 
         if (keyContext && !isMaster && keyContext.kv && keyContext.record) {
           try {
-            keyContext.record.remaining = Math.max(0, keyContext.record.remaining - 1);
+            keyContext.record.remaining = Math.max(
+              0,
+              keyContext.record.remaining - 1
+            );
+            keyContext.record.used = Math.max(
+              0,
+              PACKAGE_REQUESTS_LIMIT - keyContext.record.remaining
+            );
+            keyContext.record.updatedAt = Date.now();
             updatedRemaining = keyContext.record.remaining;
             await keyContext.kv.put(
               keyContext.storageKey,
               JSON.stringify(keyContext.record)
             );
           } catch (kvWriteErr) {
-            console.warn("KV write error on decrement:", kvWriteErr);
+            console.warn("USERS_KV write error on decrement:", kvWriteErr);
             storageMode = "client_fallback";
           }
         }

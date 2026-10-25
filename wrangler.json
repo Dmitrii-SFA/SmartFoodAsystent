@@ -2,6 +2,7 @@
   "name": "api",
   "main": "worker.js",
   "compatibility_date": "2025-02-01",
+  "keep_vars": true,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -9,3 +10,4 @@
     "not_found_handling": "single-page-application"
   }
 }
+

@@ -1,7 +1,7 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, x-access-token, x-device-id",
+  "Access-Control-Allow-Headers": "Content-Type, x-access-token, x-access-key, x-device-id",
   "Access-Control-Expose-Headers": "x-remaining-requests, x-is-master, x-storage-mode",
 };
 
@@ -16,15 +16,25 @@ const memoryKeyDevices = new Map();
 function parseAllowedKeys(raw) {
   if (!raw || typeof raw !== "string") return [];
   return raw
-    .split(/[\s,;]+/)
+    .split(/[,;\n\r]+/)
     .map((k) => k.trim())
     .filter(Boolean);
 }
 
 function getKvNamespace(env) {
   if (!env || typeof env !== "object") return null;
-  const candidate = env.KEYS_KV || env.QUOTA_KV || env.AI_QUOTA_KV || env.KV || null;
-  if (candidate && typeof candidate.get === "function" && typeof candidate.put === "function") {
+  const candidate =
+    env.USERS_KV ||
+    env.KEYS_KV ||
+    env.QUOTA_KV ||
+    env.AI_QUOTA_KV ||
+    env.KV ||
+    null;
+  if (
+    candidate &&
+    typeof candidate.get === "function" &&
+    typeof candidate.put === "function"
+  ) {
     return candidate;
   }
   return null;
@@ -73,11 +83,18 @@ function rollbackLastRateLimitTimestamp(clientKey) {
   }
 }
 
-async function verifyAndLoadKeyState({ accessKey, deviceId, env, registerDevice = true }) {
+async function verifyAndLoadKeyState({
+  accessKey,
+  deviceId,
+  env,
+  registerDevice = true,
+}) {
   const cleanKey = (accessKey || "").trim();
   const cleanDevice = (deviceId || "").trim();
-  const masterKey = (env?.MASTER_KEY || env?.OWNER_MASTER_KEY || "").trim();
+  const masterKey =
+    typeof env?.MASTER_KEY === "string" ? env.MASTER_KEY.trim() : "";
 
+  // 1. Мастер-ключ из env.MASTER_KEY проверяется в первую очередь
   if (masterKey && cleanKey === masterKey) {
     return {
       ok: true,
@@ -89,35 +106,78 @@ async function verifyAndLoadKeyState({ accessKey, deviceId, env, registerDevice 
     };
   }
 
-  const allowedKeysRaw = env?.ALLOWED_KEYS || env?.ACCESS_KEYS || env?.VALID_KEYS || "";
+  // 2. Проверка по списку разрешённых ключей env.ALLOWED_KEYS
+  const allowedKeysRaw =
+    typeof env?.ALLOWED_KEYS === "string" ? env.ALLOWED_KEYS : "";
   const allowedKeys = parseAllowedKeys(allowedKeysRaw);
-
-  if (allowedKeys.length > 0 && !allowedKeys.includes(cleanKey)) {
-    return {
-      ok: false,
-      status: 403,
-      code: "INVALID_KEY",
-      error: "Неверный ключ активации. Проверьте правильность введённого ключа.",
-    };
-  }
+  const isInAllowedKeys = allowedKeys.includes(cleanKey);
 
   const kv = getKvNamespace(env);
 
+  if (!isInAllowedKeys && (allowedKeys.length > 0 || Boolean(masterKey))) {
+    let existsInKv = false;
+    if (kv && cleanKey) {
+      try {
+        const existingRecord =
+          (await kv.get(cleanKey, "json")) ||
+          (await kv.get(`key_v1:${cleanKey}`, "json"));
+        if (existingRecord && typeof existingRecord === "object") {
+          existsInKv = true;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!existsInKv) {
+      return {
+        ok: false,
+        status: 403,
+        code: "INVALID_KEY",
+        error:
+          "Неверный ключ активации. Проверьте правильность введённого ключа.",
+      };
+    }
+  }
+
+  // 3. Работа с env.USERS_KV (500 запросов + максимум 2 устройства)
   if (kv) {
     try {
-      const storageKey = `key_v1:${cleanKey}`;
+      const storageKey = cleanKey;
       let record = await kv.get(storageKey, "json");
+
+      if (!record || typeof record !== "object") {
+        const legacyRecord = await kv.get(`key_v1:${cleanKey}`, "json");
+        if (legacyRecord && typeof legacyRecord === "object") {
+          record = legacyRecord;
+        }
+      }
+
+      let needsSave = false;
+
       if (!record || typeof record !== "object") {
         record = {
           remaining: PACKAGE_REQUESTS_LIMIT,
+          total: PACKAGE_REQUESTS_LIMIT,
+          used: 0,
           devices: [],
           createdAt: Date.now(),
+          updatedAt: Date.now(),
         };
+        needsSave = true;
       }
 
-      if (!Array.isArray(record.devices)) record.devices = [];
-      if (typeof record.remaining !== "number" || Number.isNaN(record.remaining)) {
+      if (!Array.isArray(record.devices)) {
+        record.devices = [];
+        needsSave = true;
+      }
+
+      if (
+        typeof record.remaining !== "number" ||
+        Number.isNaN(record.remaining)
+      ) {
         record.remaining = PACKAGE_REQUESTS_LIMIT;
+        needsSave = true;
       }
 
       if (cleanDevice) {
@@ -132,9 +192,14 @@ async function verifyAndLoadKeyState({ accessKey, deviceId, env, registerDevice 
           }
           if (registerDevice) {
             record.devices.push(cleanDevice);
-            await kv.put(storageKey, JSON.stringify(record));
+            record.updatedAt = Date.now();
+            needsSave = true;
           }
         }
+      }
+
+      if (needsSave && registerDevice) {
+        await kv.put(storageKey, JSON.stringify(record));
       }
 
       if (record.remaining <= 0) {
@@ -143,7 +208,8 @@ async function verifyAndLoadKeyState({ accessKey, deviceId, env, registerDevice 
           status: 402,
           code: "KEY_EXHAUSTED",
           remainingRequests: 0,
-          error: "Лимит в 500 ИИ-запросов по этому ключу исчерпан. Пожалуйста, приобретите новый пакет и введите новый ключ активации.",
+          error:
+            "Лимит в 500 ИИ-запросов по этому ключу исчерпан. Пожалуйста, приобретите новый пакет и введите новый ключ активации.",
         };
       }
 
@@ -159,10 +225,14 @@ async function verifyAndLoadKeyState({ accessKey, deviceId, env, registerDevice 
         record,
       };
     } catch (kvErr) {
-      console.warn("Pages Function KV error, falling back to client balance tracking:", kvErr);
+      console.warn(
+        "Pages Function USERS_KV error, falling back to client balance tracking:",
+        kvErr
+      );
     }
   }
 
+  // 4. Fallback если env.USERS_KV временно не настроено
   if (cleanDevice) {
     const knownDevices = memoryKeyDevices.get(cleanKey) || [];
     if (!knownDevices.includes(cleanDevice)) {
@@ -195,9 +265,13 @@ export async function onRequestOptions() {
   return new Response(null, { status: 204, headers: corsHeaders });
 }
 
-export async function onRequestGet() {
+export async function onRequestGet(context) {
   return new Response(
-    JSON.stringify({ status: "ok", service: "Smart Food Assistance Pages Function" }),
+    JSON.stringify({
+      status: "ok",
+      service: "Smart Food Assistance Pages Function",
+      kvBound: Boolean(getKvNamespace(context?.env)),
+    }),
     {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -211,7 +285,10 @@ export async function onRequestPost(context) {
 
   try {
     const requestData = await context.request.json();
-    const headerKey = context.request.headers.get("x-access-token") || "";
+    const headerKey =
+      context.request.headers.get("x-access-token") ||
+      context.request.headers.get("x-access-key") ||
+      "";
     const headerDevice = context.request.headers.get("x-device-id") || "";
     const accessKey = (headerKey || requestData.accessKey || "").trim();
     const deviceId = (headerDevice || requestData.deviceId || "").trim();
@@ -220,7 +297,11 @@ export async function onRequestPost(context) {
     if (requestData.action === "verify_key") {
       if (!accessKey) {
         return new Response(
-          JSON.stringify({ error: "Введите ключ активации", code: "EMPTY_KEY" }),
+          JSON.stringify({
+            valid: false,
+            error: "Введите ключ активации",
+            code: "EMPTY_KEY",
+          }),
           {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -311,11 +392,13 @@ export async function onRequestPost(context) {
       recordedRateLimit = true;
     }
 
-    const apiKey = context.env.GEMINI_API_KEY;
+    const apiKey = context.env?.GEMINI_API_KEY;
     if (!apiKey) {
       if (recordedRateLimit) rollbackLastRateLimitTimestamp(clientRateKey);
       return new Response(
-        JSON.stringify({ error: "GEMINI_API_KEY не найден в Secrets" }),
+        JSON.stringify({
+          error: "GEMINI_API_KEY не найден в настройках (env.GEMINI_API_KEY)",
+        }),
         {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -341,7 +424,7 @@ export async function onRequestPost(context) {
 
     const result = await geminiResponse.json();
     const hasValidCandidate = Boolean(
-      geminiResponse.ok &&
+      geminiResponse.status === 200 &&
         result &&
         !result.error &&
         result.candidates &&
@@ -361,14 +444,22 @@ export async function onRequestPost(context) {
 
     if (keyContext && !isMaster && keyContext.kv && keyContext.record) {
       try {
-        keyContext.record.remaining = Math.max(0, keyContext.record.remaining - 1);
+        keyContext.record.remaining = Math.max(
+          0,
+          keyContext.record.remaining - 1
+        );
+        keyContext.record.used = Math.max(
+          0,
+          PACKAGE_REQUESTS_LIMIT - keyContext.record.remaining
+        );
+        keyContext.record.updatedAt = Date.now();
         updatedRemaining = keyContext.record.remaining;
         await keyContext.kv.put(
           keyContext.storageKey,
           JSON.stringify(keyContext.record)
         );
       } catch (kvWriteErr) {
-        console.warn("Pages Function KV write error:", kvWriteErr);
+        console.warn("Pages Function USERS_KV write error:", kvWriteErr);
         storageMode = "client_fallback";
       }
     }

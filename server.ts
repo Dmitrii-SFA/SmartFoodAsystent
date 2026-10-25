@@ -1259,27 +1259,42 @@ app.post(['/api', '/api/verify-key'], async (req: Request, res: Response) => {
 
   try {
     const requestData = req.body || {};
-    const headerKey = String(req.headers['x-access-token'] || '');
+    const headerKey = String(req.headers['x-access-token'] || req.headers['x-access-key'] || '');
     const headerDevice = String(req.headers['x-device-id'] || '');
     const accessKey = (headerKey || requestData.accessKey || '').trim();
     const deviceId = (headerDevice || requestData.deviceId || '').trim();
     const apiKey = process.env.GEMINI_API_KEY;
+    const hasLocalKeyConfig = Boolean(process.env.MASTER_KEY || process.env.ALLOWED_KEYS);
 
-    // If GEMINI_API_KEY is not in local env, proxy to the remote Cloudflare Worker
-    if (!apiKey && !process.env.ALLOWED_KEYS && !process.env.MASTER_KEY) {
-      const workerRes = await fetch('https://api.smartfoodasystent.workers.dev/api', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-access-token': accessKey,
-          'x-device-id': deviceId,
-        },
-        body: JSON.stringify(requestData),
-      });
+    // If MASTER_KEY / ALLOWED_KEYS are configured in Cloudflare Worker rather than local .env,
+    // proxy key verification and keyed requests to the Cloudflare Worker (with local fallback if unreachable)
+    if ((!apiKey && !hasLocalKeyConfig) || (accessKey && !hasLocalKeyConfig)) {
+      try {
+        const workerRes = await fetch('https://api.smartfoodasystent.workers.dev/api', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-access-token': accessKey,
+            'x-device-id': deviceId,
+          },
+          body: JSON.stringify(requestData),
+        });
 
-      const data = await workerRes.json().catch(() => ({}));
-      res.status(workerRes.status).json(data);
-      return;
+        if (workerRes.status < 500) {
+          const isMasterHeader = workerRes.headers.get('x-is-master');
+          const remHeader = workerRes.headers.get('x-remaining-requests');
+          const modeHeader = workerRes.headers.get('x-storage-mode');
+          if (isMasterHeader) res.setHeader('x-is-master', isMasterHeader);
+          if (remHeader) res.setHeader('x-remaining-requests', remHeader);
+          if (modeHeader) res.setHeader('x-storage-mode', modeHeader);
+
+          const data = await workerRes.json().catch(() => ({}));
+          res.status(workerRes.status).json(data);
+          return;
+        }
+      } catch {
+        // Fallback to local handler if remote worker is temporarily unreachable
+      }
     }
 
     // 1. Key verification action without calling AI
