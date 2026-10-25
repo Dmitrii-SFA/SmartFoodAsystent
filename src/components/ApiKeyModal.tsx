@@ -8,13 +8,18 @@ import {
   Sparkles,
   X,
   CreditCard,
-  Crown,
+  Loader2,
+  AlertCircle,
+  Smartphone,
 } from 'lucide-react';
 import {
-  STRIPE_PAYMENT_URL,
+  PAYMENT_PACKAGE_500_URL,
+  PAID_PACKAGE_REQUESTS,
+  STARTER_FREE_REQUESTS,
+  MAX_DEVICES_PER_KEY,
   getSavedAccessKey,
-  saveAccessKey,
   getQuotaStatus,
+  verifyAndActivateAccessKey,
 } from '../utils/accessControl';
 
 interface ApiKeyModalProps {
@@ -41,15 +46,28 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   onSaveApiKey,
 }) => {
   const [keyInput, setKeyInput] = useState<string>('');
+  const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [activatedSuccess, setActivatedSuccess] = useState<boolean>(false);
+  const [successDetails, setSuccessDetails] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [, setQuotaTick] = useState<number>(0);
+
+  useEffect(() => {
+    const handleQuotaUpdate = () => setQuotaTick((t) => t + 1);
+    window.addEventListener('sfa-quota-updated', handleQuotaUpdate);
+    return () => window.removeEventListener('sfa-quota-updated', handleQuotaUpdate);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
       const currentKey = accessKey !== undefined ? accessKey : getSavedAccessKey();
-      setKeyInput(currentKey);
+      const currentQuota = getQuotaStatus();
+      // Если предыдущий ключ исчерпал все 500 запросов, очищаем поле для удобного ввода нового ключа
+      setKeyInput(currentQuota.isKeyExhausted ? '' : currentKey);
       setActivatedSuccess(false);
+      setSuccessDetails(null);
       setErrorMsg(null);
+      setIsVerifying(false);
     }
   }, [isOpen, accessKey]);
 
@@ -57,24 +75,49 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
 
   const quota = getQuotaStatus();
 
-  const handleActivateKey = (e: React.FormEvent) => {
+  const handleActivateKey = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleaned = keyInput.trim();
     if (!cleaned) {
-      setErrorMsg('Пожалуйста, введите ключ доступа');
+      setErrorMsg('Пожалуйста, введите ключ активации');
       return;
     }
 
     setErrorMsg(null);
-    saveAccessKey(cleaned);
-    onSaveAccessKey?.(cleaned);
-    onSaveApiKey?.(cleaned);
-    setActivatedSuccess(true);
+    setSuccessDetails(null);
+    setIsVerifying(true);
 
-    setTimeout(() => {
-      setActivatedSuccess(false);
-      onClose();
-    }, 1100);
+    try {
+      const result = await verifyAndActivateAccessKey(cleaned);
+      if (!result.valid) {
+        setErrorMsg(
+          result.error ||
+            'Не удалось активировать ключ. Проверьте правильность кода или лимит устройств.'
+        );
+        setIsVerifying(false);
+        return;
+      }
+
+      onSaveAccessKey?.(cleaned);
+      onSaveApiKey?.(cleaned);
+      setActivatedSuccess(true);
+      setSuccessDetails(
+        result.isMaster
+          ? 'Мастер-ключ активирован! Включён полный безлимит запросов.'
+          : `Ключ успешно активирован! Доступно запросов: ${
+              result.remainingRequests ?? PAID_PACKAGE_REQUESTS
+            } из ${PAID_PACKAGE_REQUESTS}.`
+      );
+
+      setTimeout(() => {
+        setActivatedSuccess(false);
+        onClose();
+      }, 1300);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Ошибка при проверке ключа. Попробуйте ещё раз.');
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   return (
@@ -85,15 +128,15 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
         {/* Top Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800/90 bg-slate-900/60">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/35 text-amber-400 flex items-center justify-center shrink-0">
-              <Crown className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/35 text-emerald-400 flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400 block">
-                Годовой доступ
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block">
+                Баланс ИИ-запросов
               </span>
               <h2 className="text-base font-extrabold text-white leading-tight">
-                Полный доступ на 1 год
+                Пакет на {PAID_PACKAGE_REQUESTS} ИИ-запросов
               </h2>
             </div>
           </div>
@@ -109,38 +152,73 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
         </div>
 
         {/* Body */}
-        <div className="p-5 space-y-5 text-xs">
-          {/* Status Pill */}
+        <div className="p-5 space-y-4 text-xs">
+          {/* Current Balance Status Box */}
           <div
-            className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${
-              quota.hasAccessKey
+            className={`p-3.5 rounded-xl border flex items-center justify-between gap-2 ${
+              quota.isMasterKey
                 ? 'border-emerald-500/40 bg-emerald-950/30 text-emerald-200'
-                : 'border-amber-500/40 bg-amber-950/25 text-amber-200'
+                : quota.remainingRequests > 0
+                ? quota.hasAccessKey
+                  ? 'border-emerald-500/40 bg-emerald-950/30 text-emerald-200'
+                  : 'border-cyan-500/40 bg-cyan-950/25 text-cyan-200'
+                : 'border-amber-500/50 bg-amber-950/30 text-amber-200'
             }`}
           >
-            <div className="flex items-center gap-2">
-              {quota.hasAccessKey ? (
+            <div className="flex items-center gap-2 min-w-0">
+              {quota.isMasterKey || quota.hasAccessKey ? (
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
               ) : (
-                <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
               )}
-              <span className="font-semibold">
-                {quota.hasAccessKey ? 'Годовой доступ активен' : 'Пробный режим (20 запросов/сутки)'}
-              </span>
+              <div className="min-w-0">
+                <span className="font-bold block truncate">
+                  {quota.isMasterKey
+                    ? 'Мастер-ключ владельца (Безлимит)'
+                    : quota.hasAccessKey
+                    ? quota.isKeyExhausted
+                      ? 'Пакет 500 запросов исчерпан'
+                      : 'Пакет 500 запросов активен'
+                    : `Стартовый пакет (${STARTER_FREE_REQUESTS} бесплатных)`}
+                </span>
+                <span className="text-[10px] opacity-80 block">
+                  Без ограничения по сроку действия
+                </span>
+              </div>
             </div>
-            <span className="font-mono font-bold text-[11px] px-2 py-0.5 rounded-lg bg-slate-900/80 border border-slate-700 text-white shrink-0">
-              Осталось сегодня: {quota.remainingToday} / {quota.dailyLimit}
+
+            <span className="font-mono font-bold text-xs px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-700 text-white shrink-0">
+              {quota.isMasterKey
+                ? 'Осталось: ∞'
+                : `Осталось: ${quota.remainingRequests} / ${quota.packageLimit}`}
             </span>
           </div>
 
-          {/* Description & Main CTA */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/40 border border-slate-800 space-y-4">
-            <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
-              Неограниченная база продуктов, до 100 ИИ-сканирований и рецептов в день, поддержка BLIK и банковских карт
-            </p>
+          {quota.isKeyExhausted && (
+            <div className="p-3 rounded-xl border border-amber-500/40 bg-amber-950/30 text-amber-200 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <span className="leading-relaxed">
+                Все {PAID_PACKAGE_REQUESTS} запросов по текущему ключу использованы. Приобретите новый пакет и введите новый ключ для следующих {PAID_PACKAGE_REQUESTS} запросов.
+              </span>
+            </div>
+          )}
+
+          {/* Package Description & Purchase Button */}
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/40 border border-slate-800 space-y-3.5">
+            <div className="space-y-1.5">
+              <div className="text-xs sm:text-sm font-bold text-white">
+                Дополнительный пакет: +{PAID_PACKAGE_REQUESTS} ИИ-запросов
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Пакет на {PAID_PACKAGE_REQUESTS} обращений к нейросети <strong>без ограничения по сроку действия</strong> (сканирование этикеток по фото, расчёт продуктов по названию, генерация рецептов и расчёт суточной нормы). Поддержка оплаты через <strong>BLIK и банковские карты</strong>.
+              </p>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                • Запросы списываются только при успешном ответе ИИ. Ручное ведение дневника, база продуктов и рецептов всегда работают бесплатно.
+              </p>
+            </div>
 
             <a
-              href={STRIPE_PAYMENT_URL}
+              href={PAYMENT_PACKAGE_500_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="w-full min-h-[44px] py-3 px-4 rounded-xl font-bold text-xs sm:text-sm text-white shadow-lg flex items-center justify-center gap-2 transition active:scale-[0.99] hover:opacity-95"
@@ -149,20 +227,26 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
               }}
             >
               <CreditCard className="w-4 h-4 shrink-0" />
-              <span>Оформить доступ на 1 год</span>
+              <span>Купить пакет на {PAID_PACKAGE_REQUESTS} ИИ-запросов</span>
               <ExternalLink className="w-3.5 h-3.5 shrink-0 opacity-80" />
             </a>
           </div>
 
-          {/* Already have a key section */}
+          {/* Key Activation Form */}
           <form
             onSubmit={handleActivateKey}
-            className="pt-4 border-t border-slate-800/90 space-y-2.5"
+            className="pt-3.5 border-t border-slate-800/90 space-y-2.5"
           >
-            <label className="block text-xs font-bold text-slate-200 flex items-center gap-1.5">
-              <Key className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>У меня уже есть ключ</span>
-            </label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Key className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Активировать ключ пакета</span>
+              </label>
+              <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                <Smartphone className="w-3 h-3 text-slate-400 shrink-0" />
+                <span>до {MAX_DEVICES_PER_KEY} устройств</span>
+              </span>
+            </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <input
@@ -172,32 +256,43 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                   setKeyInput(e.target.value);
                   setErrorMsg(null);
                 }}
-                placeholder="Введите ваш ключ доступа..."
-                className="flex-1 min-h-[40px] px-3.5 py-2 rounded-xl border border-slate-700 bg-slate-900 text-white font-mono text-xs placeholder-slate-500 focus:outline-hidden focus:border-emerald-500"
+                disabled={isVerifying}
+                placeholder="Введите ключ активации на 500 запросов..."
+                className="flex-1 min-h-[40px] px-3.5 py-2 rounded-xl border border-slate-700 bg-slate-900 text-white font-mono text-xs placeholder-slate-500 focus:outline-hidden focus:border-emerald-500 disabled:opacity-60"
               />
               <button
                 type="submit"
-                className="min-h-[40px] px-4 py-2 rounded-xl font-bold text-xs text-white bg-emerald-600 hover:bg-emerald-500 transition flex items-center justify-center gap-1.5 shrink-0 active:scale-95"
+                disabled={isVerifying}
+                className="min-h-[40px] px-4 py-2 rounded-xl font-bold text-xs text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 transition flex items-center justify-center gap-1.5 shrink-0 active:scale-95"
               >
-                {activatedSuccess ? (
+                {isVerifying ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Проверка...</span>
+                  </>
+                ) : activatedSuccess ? (
                   <>
                     <Check className="w-4 h-4" />
                     <span>Активировано!</span>
                   </>
                 ) : (
-                  <span>Активировать</span>
+                  <span>Подтвердить</span>
                 )}
               </button>
             </div>
 
             {errorMsg && (
-              <p className="text-[11px] text-red-400 font-medium">{errorMsg}</p>
+              <div className="p-2.5 rounded-xl bg-red-950/40 border border-red-500/40 text-[11px] text-red-300 font-medium flex items-start gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                <span>{errorMsg}</span>
+              </div>
             )}
+
             {activatedSuccess && (
-              <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
-                <Check className="w-3.5 h-3.5" />
-                <span>Ключ годового доступа успешно сохранён!</span>
-              </p>
+              <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-[11px] text-emerald-300 font-semibold flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>{successDetails || 'Ключ успешно активирован!'}</span>
+              </div>
             )}
           </form>
         </div>

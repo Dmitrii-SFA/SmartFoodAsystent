@@ -638,11 +638,11 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     const aiConfig = resolveAiConfigFromReq(req);
     const hasCustomKey = Boolean(aiConfig.apiKey && aiConfig.apiKey.trim().length > 0);
 
-    // If using default Gemini without custom key and demo limit is exceeded:
-    if (aiConfig.provider === 'gemini' && !hasCustomKey && demoRequestsUsed >= 10) {
+    // If starter 100 free requests are exhausted and no key is active:
+    if (aiConfig.provider === 'gemini' && !hasCustomKey && demoRequestsUsed >= 100) {
       res.json({
         assistantMessage:
-          '⚠️ Вы исчерпали лимит бесплатного демо-ассистента (10 запросов в день).\n\nЧтобы продолжить пользоваться ИИ без ограничений, пожалуйста, введите свой собственный API-ключ Google Gemini, OpenAI или OpenRouter в настройках приложения.',
+          '⚠️ Стартовый пакет из 100 бесплатных ИИ-запросов исчерпан.\n\nВы можете приобрести дополнительный пакет на 500 ИИ-запросов без ограничения по сроку действия или ввести ключ активации.',
         summaryOfChanges: null,
         updatedConfig: null,
         suggestedMealsToAdd: null,
@@ -1064,47 +1064,348 @@ app.get('/api', (_req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'Smart Food Assistance Local Dev Proxy' });
 });
 
-app.post('/api', async (req: Request, res: Response) => {
+// Server-side Key & Package Balance Store (with graceful fallback)
+const PACKAGE_REQUESTS_LIMIT = 500;
+const MAX_DEVICES_PER_KEY = 2;
+const MIN_REQUEST_INTERVAL_MS = 9500;
+const MAX_REQUESTS_PER_MINUTE = 3;
+
+interface ServerKeyRecord {
+  remaining: number;
+  devices: string[];
+  createdAt: number;
+}
+
+const serverKeyStore = new Map<string, ServerKeyRecord>();
+const serverRateLimits = new Map<string, number[]>();
+
+function parseAllowedKeysFromEnv(): string[] {
+  const raw = process.env.ALLOWED_KEYS || process.env.ACCESS_KEYS || process.env.VALID_KEYS || '';
+  if (!raw || typeof raw !== 'string') return [];
+  return raw
+    .split(/[\s,;]+/)
+    .map((k) => k.trim())
+    .filter(Boolean);
+}
+
+function checkServerRateLimit(clientKey: string): {
+  allowed: boolean;
+  code?: string;
+  waitSeconds?: number;
+  message?: string;
+} {
+  const now = Date.now();
+  const rawList = serverRateLimits.get(clientKey) || [];
+  const recent = rawList.filter((t) => now - t < 60000);
+
+  if (recent.length > 0) {
+    const lastAt = recent[recent.length - 1];
+    const elapsed = now - lastAt;
+    if (elapsed < MIN_REQUEST_INTERVAL_MS) {
+      const waitSeconds = Math.max(1, Math.ceil((10000 - elapsed) / 1000));
+      return {
+        allowed: false,
+        code: 'COOLDOWN',
+        waitSeconds,
+        message: `Пожалуйста, подождите ${waitSeconds} сек. перед следующим запросом (защита от двойного нажатия: пауза 10 сек).`,
+      };
+    }
+  }
+
+  if (recent.length >= MAX_REQUESTS_PER_MINUTE) {
+    const oldest = recent[0];
+    const waitSeconds = Math.max(1, Math.ceil((60000 - (now - oldest)) / 1000));
+    return {
+      allowed: false,
+      code: 'RATE_LIMIT',
+      waitSeconds,
+      message: `Превышен минутный лимит (максимум 3 запроса в минуту). Подождите ${waitSeconds} сек.`,
+    };
+  }
+
+  recent.push(now);
+  serverRateLimits.set(clientKey, recent);
+  return { allowed: true };
+}
+
+function rollbackServerRateLimit(clientKey: string) {
+  const recent = serverRateLimits.get(clientKey);
+  if (Array.isArray(recent) && recent.length > 0) {
+    recent.pop();
+    serverRateLimits.set(clientKey, recent);
+  }
+}
+
+function verifyServerKeyState(accessKey: string, deviceId: string): {
+  ok: boolean;
+  status?: number;
+  code?: string;
+  error?: string;
+  isMaster?: boolean;
+  remainingRequests?: number | null;
+  storageMode?: 'server' | 'client_fallback';
+  devicesUsed?: number;
+  maxDevices?: number | null;
+  record?: ServerKeyRecord;
+} {
+  const cleanKey = (accessKey || '').trim();
+  const cleanDevice = (deviceId || '').trim();
+  const masterKey = (process.env.MASTER_KEY || process.env.OWNER_MASTER_KEY || '').trim();
+
+  if (masterKey && cleanKey === masterKey) {
+    return {
+      ok: true,
+      isMaster: true,
+      remainingRequests: null,
+      storageMode: 'server',
+      devicesUsed: 0,
+      maxDevices: null,
+    };
+  }
+
+  const allowedKeys = parseAllowedKeysFromEnv();
+  if (allowedKeys.length > 0 && !allowedKeys.includes(cleanKey)) {
+    return {
+      ok: false,
+      status: 403,
+      code: 'INVALID_KEY',
+      error: 'Неверный ключ активации. Проверьте правильность введённого ключа.',
+    };
+  }
+
+  // If ALLOWED_KEYS is configured on the server, track 500-request package & 2-device limit in serverKeyStore
+  if (allowedKeys.length > 0) {
+    let record = serverKeyStore.get(cleanKey);
+    if (!record) {
+      record = {
+        remaining: PACKAGE_REQUESTS_LIMIT,
+        devices: [],
+        createdAt: Date.now(),
+      };
+      serverKeyStore.set(cleanKey, record);
+    }
+
+    if (cleanDevice) {
+      if (!record.devices.includes(cleanDevice)) {
+        if (record.devices.length >= MAX_DEVICES_PER_KEY) {
+          return {
+            ok: false,
+            status: 403,
+            code: 'DEVICE_LIMIT_REACHED',
+            error: `Превышен лимит устройств: этот ключ уже активирован на ${MAX_DEVICES_PER_KEY} устройствах (максимум 2 устройства на один ключ).`,
+          };
+        }
+        record.devices.push(cleanDevice);
+      }
+    }
+
+    if (record.remaining <= 0) {
+      return {
+        ok: false,
+        status: 402,
+        code: 'KEY_EXHAUSTED',
+        remainingRequests: 0,
+        error: 'Лимит в 500 ИИ-запросов по этому ключу исчерпан. Пожалуйста, приобретите новый пакет и введите новый ключ активации.',
+      };
+    }
+
+    return {
+      ok: true,
+      isMaster: false,
+      remainingRequests: record.remaining,
+      storageMode: 'server',
+      devicesUsed: record.devices.length,
+      maxDevices: MAX_DEVICES_PER_KEY,
+      record,
+    };
+  }
+
+  // Fallback when server storage / ALLOWED_KEYS is not yet configured: do not crash, let client track 500 balance
+  let fallbackRecord = serverKeyStore.get(cleanKey);
+  if (!fallbackRecord) {
+    fallbackRecord = {
+      remaining: PACKAGE_REQUESTS_LIMIT,
+      devices: [],
+      createdAt: Date.now(),
+    };
+    serverKeyStore.set(cleanKey, fallbackRecord);
+  }
+
+  if (cleanDevice && !fallbackRecord.devices.includes(cleanDevice)) {
+    if (fallbackRecord.devices.length >= MAX_DEVICES_PER_KEY) {
+      return {
+        ok: false,
+        status: 403,
+        code: 'DEVICE_LIMIT_REACHED',
+        error: `Превышен лимит устройств: этот ключ уже активирован на ${MAX_DEVICES_PER_KEY} устройствах.`,
+      };
+    }
+    fallbackRecord.devices.push(cleanDevice);
+  }
+
+  return {
+    ok: true,
+    isMaster: false,
+    remainingRequests: null,
+    storageMode: 'client_fallback',
+    devicesUsed: fallbackRecord.devices.length || 1,
+    maxDevices: MAX_DEVICES_PER_KEY,
+  };
+}
+
+app.post(['/api', '/api/verify-key'], async (req: Request, res: Response) => {
+  let clientRateKey = '';
+  let recordedRateLimit = false;
+
   try {
     const requestData = req.body || {};
+    const headerKey = String(req.headers['x-access-token'] || '');
+    const headerDevice = String(req.headers['x-device-id'] || '');
+    const accessKey = (headerKey || requestData.accessKey || '').trim();
+    const deviceId = (headerDevice || requestData.deviceId || '').trim();
     const apiKey = process.env.GEMINI_API_KEY;
 
-    // If GEMINI_API_KEY is available in local environment, call Google Gemini directly (same as worker.js)
-    if (apiKey) {
-      const targetModel = requestData.model || 'gemini-3.5-flash-lite';
-      const googleUrl = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
-
-      const geminiPayload = {
-        contents: requestData.contents,
-        ...(requestData.generationConfig
-          ? { generationConfig: requestData.generationConfig }
-          : {}),
-      };
-
-      const geminiResponse = await fetch(googleUrl, {
+    // If GEMINI_API_KEY is not in local env, proxy to the remote Cloudflare Worker
+    if (!apiKey && !process.env.ALLOWED_KEYS && !process.env.MASTER_KEY) {
+      const workerRes = await fetch('https://api.smartfoodasystent.workers.dev/api', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(geminiPayload),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-access-token': accessKey,
+          'x-device-id': deviceId,
+        },
+        body: JSON.stringify(requestData),
       });
 
-      const result = await geminiResponse.json();
-      res.status(geminiResponse.status).json(result);
+      const data = await workerRes.json().catch(() => ({}));
+      res.status(workerRes.status).json(data);
       return;
     }
 
-    // Otherwise proxy to the remote Cloudflare Worker
-    const workerRes = await fetch('https://api.smartfoodasystent.workers.dev/api', {
+    // 1. Key verification action without calling AI
+    if (requestData.action === 'verify_key' || req.path === '/api/verify-key') {
+      if (!accessKey) {
+        res.status(400).json({ error: 'Введите ключ активации', code: 'EMPTY_KEY' });
+        return;
+      }
+
+      const verification = verifyServerKeyState(accessKey, deviceId);
+      if (!verification.ok) {
+        res.status(verification.status || 403).json({
+          valid: false,
+          error: verification.error,
+          code: verification.code,
+          remainingRequests: verification.remainingRequests ?? undefined,
+        });
+        return;
+      }
+
+      res.json({
+        valid: true,
+        isMaster: verification.isMaster,
+        remainingRequests: verification.remainingRequests,
+        storageMode: verification.storageMode,
+        devicesUsed: verification.devicesUsed,
+        maxDevices: verification.maxDevices,
+      });
+      return;
+    }
+
+    // 2. Verify key if provided
+    let keyContext: ReturnType<typeof verifyServerKeyState> | null = null;
+    if (accessKey) {
+      keyContext = verifyServerKeyState(accessKey, deviceId);
+      if (!keyContext.ok) {
+        res.status(keyContext.status || 403).json({
+          error: keyContext.error,
+          code: keyContext.code,
+          remainingRequests: keyContext.remainingRequests ?? undefined,
+        });
+        return;
+      }
+    }
+
+    const isMaster = Boolean(keyContext && keyContext.isMaster);
+
+    // 3. Per-minute rate limit (3 req/min) & 10s anti-double-click pause
+    if (!isMaster) {
+      clientRateKey = deviceId || accessKey || req.ip || 'anon';
+      const rateCheck = checkServerRateLimit(clientRateKey);
+      if (!rateCheck.allowed) {
+        res.status(429).json({
+          error: rateCheck.message,
+          code: rateCheck.code,
+          waitSeconds: rateCheck.waitSeconds,
+        });
+        return;
+      }
+      recordedRateLimit = true;
+    }
+
+    if (!apiKey) {
+      if (recordedRateLimit) rollbackServerRateLimit(clientRateKey);
+      res.status(500).json({ error: 'GEMINI_API_KEY не найден в переменных окружения' });
+      return;
+    }
+
+    const targetModel = requestData.model || 'gemini-3.5-flash-lite';
+    const googleUrl = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
+
+    const geminiPayload = {
+      contents: requestData.contents,
+      ...(requestData.generationConfig
+        ? { generationConfig: requestData.generationConfig }
+        : {}),
+    };
+
+    const geminiResponse = await fetch(googleUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-access-token': String(req.headers['x-access-token'] || ''),
-      },
-      body: JSON.stringify(requestData),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(geminiPayload),
     });
 
-    const data = await workerRes.json().catch(() => ({}));
-    res.status(workerRes.status).json(data);
+    const result: any = await geminiResponse.json();
+    const hasValidCandidate = Boolean(
+      geminiResponse.ok &&
+        result &&
+        !result.error &&
+        result.candidates &&
+        result.candidates[0]?.content?.parts?.[0]?.text
+    );
+
+    if (!hasValidCandidate) {
+      if (recordedRateLimit) rollbackServerRateLimit(clientRateKey);
+      res.status(geminiResponse.ok ? 502 : geminiResponse.status).json(result);
+      return;
+    }
+
+    // 4. Deduct 1 request ONLY on successful and valid AI response
+    let updatedRemaining: number | null = null;
+    const storageMode = keyContext ? keyContext.storageMode || 'client_fallback' : 'starter';
+
+    if (keyContext && !isMaster && keyContext.record && keyContext.storageMode === 'server') {
+      keyContext.record.remaining = Math.max(0, keyContext.record.remaining - 1);
+      updatedRemaining = keyContext.record.remaining;
+    }
+
+    res.setHeader('x-is-master', isMaster ? 'true' : 'false');
+    res.setHeader('x-storage-mode', storageMode);
+    if (typeof updatedRemaining === 'number') {
+      res.setHeader('x-remaining-requests', String(updatedRemaining));
+      result.remainingRequests = updatedRemaining;
+    }
+
+    result._quota = {
+      isMaster,
+      remainingRequests: updatedRemaining,
+      storageMode,
+    };
+
+    res.status(200).json(result);
   } catch (err: any) {
+    if (recordedRateLimit && clientRateKey) {
+      rollbackServerRateLimit(clientRateKey);
+    }
     res.status(500).json({ error: err?.message || 'Proxy error' });
   }
 });

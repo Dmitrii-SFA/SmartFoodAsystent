@@ -286,6 +286,7 @@ export const DailyNormCalculator: React.FC<DailyNormCalculatorProps> = ({
           unit: m.unit,
         })),
         langCode,
+        onOpenPaywall: onOpenPaywallModal,
       });
 
       const mergedTargets: Record<string, number> = {};
@@ -330,7 +331,7 @@ export const DailyNormCalculator: React.FC<DailyNormCalculatorProps> = ({
       setTimeout(() => setAppliedFlash(false), 2500);
     } catch (err: any) {
       if (err instanceof AiQuotaError) {
-        if (err.code === 'daily_limit_reached' && onOpenPaywallModal) {
+        if ((err.reason === 'daily_limit_reached' || err.code === 'LIMIT_REACHED') && onOpenPaywallModal) {
           onOpenPaywallModal();
         }
         setAiError(err.message);

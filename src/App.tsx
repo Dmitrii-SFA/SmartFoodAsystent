@@ -55,6 +55,7 @@ import {
 
 import {
   checkAndActivateUrlAccessKey,
+  verifyAndActivateAccessKey,
   getSavedAccessKey,
   saveAccessKey,
   getQuotaStatus,
@@ -784,19 +785,45 @@ export default function App() {
     }, 4000);
   };
 
+  // Keep quota counter in sync with accessControl events
+  useEffect(() => {
+    const syncQuotaState = () => {
+      setApiKey(getSavedAccessKey());
+      setDemoRequestsUsed(getQuotaStatus().usedRequests);
+    };
+    window.addEventListener('sfa-quota-updated', syncQuotaState);
+    return () => window.removeEventListener('sfa-quota-updated', syncQuotaState);
+  }, []);
+
   // Auto-activate Access Key from URL (?key=...) on initial load
   useEffect(() => {
     const activatedKey = checkAndActivateUrlAccessKey();
     if (activatedKey) {
-      setApiKey(activatedKey);
-      setDemoRequestsUsed(getQuotaStatus().usedToday);
-      setConfigToast({
-        message: 'Годовой доступ успешно активирован!',
-        visible: true,
+      verifyAndActivateAccessKey(activatedKey).then((res) => {
+        if (!res.valid) {
+          saveAccessKey('');
+          setApiKey('');
+          setConfigToast({
+            message: res.error || 'Не удалось активировать ключ из ссылки',
+            visible: true,
+          });
+          setIsApiKeyModalOpen(true);
+        } else {
+          setApiKey(activatedKey);
+          setDemoRequestsUsed(getQuotaStatus().usedRequests);
+          setConfigToast({
+            message: res.isMaster
+              ? 'Мастер-ключ владельца активирован! Полный безлимит.'
+              : `Пакет на 500 ИИ-запросов успешно активирован! (Доступно: ${
+                  res.remainingRequests ?? 500
+                })`,
+            visible: true,
+          });
+        }
+        setTimeout(() => {
+          setConfigToast((prev) => ({ ...prev, visible: false }));
+        }, 4500);
       });
-      setTimeout(() => {
-        setConfigToast((prev) => ({ ...prev, visible: false }));
-      }, 4500);
     }
   }, []);
 
@@ -805,10 +832,13 @@ export default function App() {
     const trimmed = (newKey || '').trim();
     saveAccessKey(trimmed);
     setApiKey(trimmed);
-    setDemoRequestsUsed(getQuotaStatus().usedToday);
+    const updatedQuota = getQuotaStatus();
+    setDemoRequestsUsed(updatedQuota.usedRequests);
     if (trimmed) {
       setConfigToast({
-        message: 'Годовой доступ успешно активирован!',
+        message: updatedQuota.isMasterKey
+          ? 'Мастер-ключ активирован! Полный безлимит запросов.'
+          : `Ключ активирован! Доступно ИИ-запросов: ${updatedQuota.remainingRequests} из ${updatedQuota.packageLimit}.`,
         visible: true,
       });
       setTimeout(() => {
@@ -819,7 +849,7 @@ export default function App() {
 
   // Refresh quota usage state
   const handleIncrementDemoUsage = () => {
-    setDemoRequestsUsed(getQuotaStatus().usedToday);
+    setDemoRequestsUsed(getQuotaStatus().usedRequests);
   };
 
   // Sync config to localStorage

@@ -84,10 +84,17 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const [, setQuotaTick] = useState(0);
+  useEffect(() => {
+    const onQuotaUpdate = () => setQuotaTick((t) => t + 1);
+    window.addEventListener('sfa-quota-updated', onQuotaUpdate);
+    return () => window.removeEventListener('sfa-quota-updated', onQuotaUpdate);
+  }, []);
+
   const quota = getQuotaStatus();
   const hasCustomKey = quota.hasAccessKey;
-  const remainingDemoRequests = quota.remainingToday;
-  const totalDemoLimit = quota.dailyLimit;
+  const remainingDemoRequests = quota.remainingRequests;
+  const totalDemoLimit = quota.packageLimit;
 
   const radiusClass = getBorderRadiusClass(config.theme.borderRadius);
 
@@ -117,14 +124,20 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
         message: text,
         currentConfig: config,
         history: messages.map((m) => ({ role: m.role, content: m.content })),
+        onOpenPaywall: onOpenApiKeyModal,
       });
 
       onIncrementDemoUsage?.();
       const updatedQuota = getQuotaStatus();
 
       let finalMessageText = data.assistantMessage || 'Команда обработана.';
-      if (!updatedQuota.hasAccessKey && !data.isLimitReached && updatedQuota.remainingToday <= 2 && updatedQuota.remainingToday > 0) {
-        finalMessageText += `\n\n⚠️ Обратите внимание: у вас осталось ${updatedQuota.remainingToday} из ${updatedQuota.dailyLimit} бесплатных запросов на сегодня.`;
+      if (
+        !updatedQuota.isMasterKey &&
+        !data.isLimitReached &&
+        updatedQuota.remainingRequests <= 5 &&
+        updatedQuota.remainingRequests > 0
+      ) {
+        finalMessageText += `\n\n⚠️ Обратите внимание: у вас осталось ${updatedQuota.remainingRequests} из ${updatedQuota.packageLimit} ИИ-запросов.`;
       }
 
       const assistantMsg: ChatMessage = {
@@ -231,25 +244,29 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
           </div>
 
           <div className="flex items-center gap-1">
-            {/* Annual Access / Paywall button */}
+            {/* Package Balance / Key button */}
             <button
               onClick={onOpenApiKeyModal}
               className={`flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded-lg border transition ${
-                hasCustomKey
+                quota.isMasterKey || (hasCustomKey && remainingDemoRequests > 0)
                   ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
-                  : remainingDemoRequests <= 2
+                  : remainingDemoRequests <= 5
                   ? 'border-amber-500/40 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 animate-pulse'
                   : 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20'
               }`}
               title={
-                hasCustomKey
-                  ? `Годовой доступ активен: осталось ${remainingDemoRequests} из ${totalDemoLimit} запросов сегодня`
-                  : `Пробный режим: осталось ${remainingDemoRequests} из ${totalDemoLimit} запросов сегодня`
+                quota.isMasterKey
+                  ? 'Активен мастер-ключ (безлимит)'
+                  : hasCustomKey
+                  ? `Пакет 500 запросов: осталось ${remainingDemoRequests} из ${totalDemoLimit}`
+                  : `Стартовый пакет: осталось ${remainingDemoRequests} из ${totalDemoLimit}`
               }
             >
               <Key className="w-3.5 h-3.5" />
               <span className="hidden sm:inline font-mono">
-                {hasCustomKey ? `PRO ${remainingDemoRequests}/${totalDemoLimit}` : `${remainingDemoRequests}/${totalDemoLimit}`}
+                {quota.isMasterKey
+                  ? '∞'
+                  : `${remainingDemoRequests}/${totalDemoLimit}`}
               </span>
             </button>
 
@@ -343,17 +360,17 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
                     <div className="p-3.5 rounded-xl border border-amber-500/50 bg-amber-950/40 text-amber-200 space-y-2.5">
                       <div className="flex items-center gap-1.5 font-bold text-amber-300">
                         <AlertTriangle className="w-4 h-4 text-amber-400" />
-                        <span>Полный доступ на 1 год:</span>
+                        <span>Пакет на 500 ИИ-запросов:</span>
                       </div>
                       <p className="text-[11px] text-amber-200/90 leading-relaxed">
-                        Неограниченная база продуктов, до 100 ИИ-сканирований и рецептов в день, поддержка BLIK и банковских карт.
+                        Дополнительный пакет на 500 ИИ-запросов без ограничения по сроку действия (поддержка оплаты через BLIK и банковские карты).
                       </p>
                       <button
                         onClick={onOpenApiKeyModal}
-                        className="w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-bold rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-lg transition active:scale-95"
+                        className="w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg transition active:scale-95"
                       >
                         <Key className="w-3.5 h-3.5 text-yellow-300" />
-                        <span>Открыть «Годовой доступ»</span>
+                        <span>Пополнить баланс / Ввести ключ</span>
                       </button>
                     </div>
                   )}

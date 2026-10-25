@@ -51,6 +51,7 @@ import {
   playSoundMelody,
 } from '../utils/soundEngine';
 import { SoundMelodyId, SoundSettingsConfig } from '../types/config';
+import { getQuotaStatus } from '../utils/accessControl';
 
 export type SettingsSectionId =
   | 'language'
@@ -445,6 +446,15 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     }
   };
 
+  const [, setQuotaRefreshTick] = useState<number>(0);
+  useEffect(() => {
+    const onQuotaChange = () => setQuotaRefreshTick((n) => n + 1);
+    window.addEventListener('sfa-quota-updated', onQuotaChange);
+    return () => window.removeEventListener('sfa-quota-updated', onQuotaChange);
+  }, []);
+
+  const liveQuota = getQuotaStatus();
+
   return (
     <div className="space-y-3.5 max-w-3xl mx-auto pb-8">
       {/* 0. Верхняя панель разделов настроек */}
@@ -466,6 +476,86 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           themeStyles={themeStyles}
           borderRadius={config.theme.borderRadius}
         />
+      </div>
+
+      {/* 1. Баланс ИИ-запросов и активация ключа (пакет 500 запросов) */}
+      <div
+        className={`relative z-20 border ${themeStyles.borderColor} ${themeStyles.cardBg} ${radiusClass} p-4 sm:p-5 shadow-sm transition-all`}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0 flex-1">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+              <Key className="w-4 h-4" />
+            </div>
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className={`text-sm sm:text-base font-bold leading-snug ${themeStyles.textPrimary}`}>
+                  {isEn
+                    ? 'AI Requests Balance & Key'
+                    : isPl
+                    ? 'Bilans zapytań AI i klucz'
+                    : 'Баланс ИИ-запросов и ключ доступа'}
+                </h4>
+                <span
+                  className={`inline-flex items-center text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-lg border ${
+                    liveQuota.isMasterKey
+                      ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300'
+                      : liveQuota.remainingRequests > 0
+                      ? 'bg-slate-800/90 border-slate-700 text-emerald-300'
+                      : 'bg-amber-950/60 border-amber-500/50 text-amber-300'
+                  }`}
+                >
+                  {liveQuota.isMasterKey
+                    ? isEn
+                      ? 'Remaining: ∞'
+                      : isPl
+                      ? 'Pozostało: ∞'
+                      : 'Осталось: ∞'
+                    : isEn
+                    ? `Remaining: ${liveQuota.remainingRequests} / ${liveQuota.packageLimit}`
+                    : isPl
+                    ? `Pozostało: ${liveQuota.remainingRequests} / ${liveQuota.packageLimit}`
+                    : `Осталось: ${liveQuota.remainingRequests} из ${liveQuota.packageLimit}`}
+                </span>
+              </div>
+              <p className="text-xs leading-relaxed text-slate-400 break-words">
+                {liveQuota.isMasterKey
+                  ? isEn
+                    ? 'Master key active — unlimited AI requests without restrictions'
+                    : isPl
+                    ? 'Klucz główny aktywny — nielimitowane zapytania AI'
+                    : 'Активен мастер-ключ владельца — полный безлимит ИИ-запросов'
+                  : liveQuota.hasAccessKey
+                  ? isEn
+                    ? 'Package of 500 AI requests (no expiration date, up to 2 devices)'
+                    : isPl
+                    ? 'Pakiet 500 zapytań AI (bez terminu ważności, do 2 urządzeń)'
+                    : 'Активен пакет на 500 ИИ-запросов без срока действия (до 2 устройств)'
+                  : isEn
+                  ? 'Starter package: 100 free AI requests. Top up +500 requests or activate a key anytime'
+                  : isPl
+                  ? 'Pakiet startowy: 100 darmowych zapytań AI. Doładuj +500 zapytań lub aktywuj klucz'
+                  : 'Стартовый пакет: 100 бесплатных ИИ-запросов. Вы можете пополнить баланс (+500 запросов) или ввести ключ заранее'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onOpenApiKeyModal}
+            className="min-h-[40px] px-4 py-2 rounded-xl font-bold text-xs text-white shadow-md flex items-center justify-center gap-1.5 shrink-0 transition active:scale-95 hover:opacity-95"
+            style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
+            <span>
+              {isEn
+                ? 'Top up / Enter Key'
+                : isPl
+                ? 'Doładuj / Wpisz klucz'
+                : 'Пополнить / Ввести ключ'}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* 2. Язык интерфейса */}

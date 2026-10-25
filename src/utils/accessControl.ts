@@ -1,32 +1,88 @@
 import { MetricConfig, UserConfig } from '../types/config';
 
 export const CLOUDFLARE_WORKER_URL = 'https://api.smartfoodasystent.workers.dev/api';
-export const STRIPE_PAYMENT_URL = 'https://buy.stripe.com/test_placeholder';
-export const ACCESS_KEY_STORAGE_KEY = 'app_access_key';
 
-const DAILY_USAGE_STORAGE_KEY = 'sfa_daily_ai_usage_v1';
+// ============================================================================
+// ССЫЛКА НА ОПЛАТУ ДОПОЛНИТЕЛЬНОГО ПАКЕТА НА 500 ИИ-ЗАПРОСОВ (BLIK И КАРТЫ)
+// Замените этот URL-заглушку на вашу реальную платежную ссылку (Stripe, Przelewy24, HotPay и т.д.)
+// ============================================================================
+export const PAYMENT_PACKAGE_500_URL = 'https://buy.stripe.com/test_placeholder_500_requests';
+export const STRIPE_PAYMENT_URL = PAYMENT_PACKAGE_500_URL;
+
+export const ACCESS_KEY_STORAGE_KEY = 'app_access_key';
+const DEVICE_ID_STORAGE_KEY = 'sfa_device_id_v1';
+const STARTER_REMAINING_STORAGE_KEY = 'sfa_starter_remaining_v1';
+const KEY_BALANCES_STORAGE_KEY = 'sfa_key_balances_v1';
+const MASTER_KEY_FLAG_STORAGE_KEY = 'sfa_is_master_key_v1';
 const RECENT_TIMESTAMPS_STORAGE_KEY = 'sfa_recent_ai_timestamps_v1';
 
-export const TRIAL_DAILY_LIMIT = 20;
-export const PRO_DAILY_LIMIT = 100;
-export const MIN_REQUEST_INTERVAL_MS = 10_000; // 10 seconds
-export const MAX_REQUESTS_PER_MINUTE = 3; // max 3 requests per 60 seconds
+// Лимиты пакетов и защита от спама / двойного нажатия
+export const STARTER_FREE_REQUESTS = 100; // 100 бесплатных запросов каждому новому пользователю
+export const PAID_PACKAGE_REQUESTS = 500; // 500 запросов в платном пакете без срока действия
+export const MAX_DEVICES_PER_KEY = 2; // максимум 2 устройства на один ключ
+export const MIN_REQUEST_INTERVAL_MS = 10_000; // пауза 10 секунд между запросами
+export const MAX_REQUESTS_PER_MINUTE = 3; // не более 3 запросов в минуту
+
+// Константы для обратной совместимости импортов
+export const TRIAL_DAILY_LIMIT = STARTER_FREE_REQUESTS;
+export const PRO_DAILY_LIMIT = PAID_PACKAGE_REQUESTS;
 
 export interface QuotaCheckResult {
   allowed: boolean;
-  reason?: 'daily_limit_reached' | 'cooldown';
+  reason?: 'daily_limit_reached' | 'quota_exhausted' | 'cooldown';
   waitSeconds?: number;
+  remainingRequests: number;
+  packageLimit: number;
+  usedRequests: number;
+  hasAccessKey: boolean;
+  isMasterKey: boolean;
+  isKeyExhausted: boolean;
+  // Поля обратной совместимости
   usedToday: number;
   dailyLimit: number;
-  hasAccessKey: boolean;
 }
 
-function getTodayDateKey(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+export interface KeyVerificationResult {
+  valid: boolean;
+  isMaster?: boolean;
+  remainingRequests?: number | null;
+  storageMode?: 'server' | 'client_fallback';
+  devicesUsed?: number;
+  maxDevices?: number | null;
+  error?: string;
+  code?: string;
+}
+
+function notifyQuotaUpdated(): void {
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(new CustomEvent('sfa-quota-updated'));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/**
+ * Генерирует и сохраняет уникальный идентификатор браузера/телефона (deviceId)
+ * для привязки ключа максимум к 2 устройствам.
+ */
+export function getOrCreateDeviceId(): string {
+  try {
+    const existing = localStorage.getItem(DEVICE_ID_STORAGE_KEY);
+    if (existing && existing.trim().length >= 8) {
+      return existing.trim();
+    }
+    const randomPart =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 12)}`;
+    const newId = `dev_${randomPart}`;
+    localStorage.setItem(DEVICE_ID_STORAGE_KEY, newId);
+    return newId;
+  } catch {
+    return 'dev_fallback_browser';
+  }
 }
 
 export function getSavedAccessKey(): string {
@@ -37,19 +93,137 @@ export function getSavedAccessKey(): string {
   }
 }
 
+export function isMasterAccessKeyActive(): boolean {
+  try {
+    return localStorage.getItem(MASTER_KEY_FLAG_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setMasterAccessKeyActive(isMaster: boolean): void {
+  try {
+    if (isMaster) {
+      localStorage.setItem(MASTER_KEY_FLAG_STORAGE_KEY, 'true');
+    } else {
+      localStorage.removeItem(MASTER_KEY_FLAG_STORAGE_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function loadKeyBalancesMap(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(KEY_BALANCES_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
+function saveKeyBalancesMap(map: Record<string, number>): void {
+  try {
+    localStorage.setItem(KEY_BALANCES_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+export function getKeyRemainingBalance(key: string): number {
+  const clean = (key || '').trim();
+  if (!clean) return 0;
+  const map = loadKeyBalancesMap();
+  if (typeof map[clean] === 'number' && !Number.isNaN(map[clean])) {
+    return Math.max(0, Math.floor(map[clean]));
+  }
+  // Для нового активированного ключа по умолчанию начисляется 500 запросов
+  map[clean] = PAID_PACKAGE_REQUESTS;
+  saveKeyBalancesMap(map);
+  return PAID_PACKAGE_REQUESTS;
+}
+
+export function setKeyRemainingBalance(key: string, remaining: number): void {
+  const clean = (key || '').trim();
+  if (!clean) return;
+  const map = loadKeyBalancesMap();
+  map[clean] = Math.max(0, Math.floor(Number(remaining) || 0));
+  saveKeyBalancesMap(map);
+  notifyQuotaUpdated();
+}
+
+export function decrementKeyRemainingBalance(key: string): number {
+  const clean = (key || '').trim();
+  if (!clean) return 0;
+  const current = getKeyRemainingBalance(clean);
+  const next = Math.max(0, current - 1);
+  setKeyRemainingBalance(clean, next);
+  return next;
+}
+
+/**
+ * Остаток стартового пакета (100 бесплатных запросов каждому новому пользователю)
+ */
+export function getStarterRemainingRequests(): number {
+  try {
+    const raw = localStorage.getItem(STARTER_REMAINING_STORAGE_KEY);
+    if (raw === null || raw === undefined || raw === '') {
+      localStorage.setItem(STARTER_REMAINING_STORAGE_KEY, String(STARTER_FREE_REQUESTS));
+      return STARTER_FREE_REQUESTS;
+    }
+    const parsed = Number(raw);
+    if (Number.isNaN(parsed)) {
+      localStorage.setItem(STARTER_REMAINING_STORAGE_KEY, String(STARTER_FREE_REQUESTS));
+      return STARTER_FREE_REQUESTS;
+    }
+    return Math.max(0, Math.min(STARTER_FREE_REQUESTS, Math.floor(parsed)));
+  } catch {
+    return STARTER_FREE_REQUESTS;
+  }
+}
+
+export function decrementStarterRemainingRequests(): number {
+  const current = getStarterRemainingRequests();
+  const next = Math.max(0, current - 1);
+  try {
+    localStorage.setItem(STARTER_REMAINING_STORAGE_KEY, String(next));
+  } catch (e) {
+    console.error('Failed to update starter remaining requests:', e);
+  }
+  notifyQuotaUpdated();
+  return next;
+}
+
 export function saveAccessKey(key: string): void {
   try {
-    const cleaned = key.trim();
+    const cleaned = (key || '').trim();
+    const prevKey = getSavedAccessKey();
     if (cleaned) {
       localStorage.setItem(ACCESS_KEY_STORAGE_KEY, cleaned);
+      if (cleaned !== prevKey) {
+        setMasterAccessKeyActive(false);
+      }
+      // Инициализируем локальный баланс 500 для нового ключа, если его еще нет
+      getKeyRemainingBalance(cleaned);
     } else {
       localStorage.removeItem(ACCESS_KEY_STORAGE_KEY);
+      setMasterAccessKeyActive(false);
     }
+    notifyQuotaUpdated();
   } catch (e) {
     console.error('Failed to save access key:', e);
   }
 }
 
+/**
+ * Автоматическое считывание ключа из URL (?key=...)
+ */
 export function checkAndActivateUrlAccessKey(): string | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -71,34 +245,121 @@ export function checkAndActivateUrlAccessKey(): string | null {
   return null;
 }
 
-export function getDailyUsageCount(): number {
-  const today = getTodayDateKey();
-  try {
-    const raw = localStorage.getItem(DAILY_USAGE_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && parsed.date === today) {
-        return Math.max(0, Number(parsed.count) || 0);
+/**
+ * Серверная проверка ключа (валидность по списку разрешенных, привязка к максимум 2 устройствам, баланс 500 запросов, мастер-ключ)
+ * с защитой от падения, если хранилище на сервере еще не подключено.
+ */
+export async function verifyAndActivateAccessKey(rawKey: string): Promise<KeyVerificationResult> {
+  const cleanKey = (rawKey || '').trim();
+  if (!cleanKey) {
+    return {
+      valid: false,
+      error: 'Пожалуйста, введите ключ активации.',
+      code: 'EMPTY_KEY',
+    };
+  }
+
+  const deviceId = getOrCreateDeviceId();
+  const candidateUrls: string[] = [
+    '/api',
+    CLOUDFLARE_WORKER_URL,
+    'https://api.smartfoodasystent.workers.dev/',
+  ];
+  const uniqueUrls = Array.from(new Set(candidateUrls));
+
+  const requestBody = {
+    action: 'verify_key',
+    accessKey: cleanKey,
+    deviceId,
+  };
+
+  for (let i = 0; i < uniqueUrls.length; i++) {
+    const endpoint = uniqueUrls[i];
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-access-token': cleanKey,
+          'x-device-id': deviceId,
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if ((res.status === 404 || res.status === 405) && i < uniqueUrls.length - 1) {
+        continue;
+      }
+
+      const data = await res.json().catch(() => ({}));
+
+      // Если сервер явно ответил об ошибке ключа / лимите устройств / исчерпанном балансе
+      if (res.status === 401 || res.status === 402 || res.status === 403 || data?.valid === false) {
+        const errCode = data?.code || (res.status === 402 ? 'KEY_EXHAUSTED' : 'INVALID_KEY');
+        if (errCode === 'KEY_EXHAUSTED') {
+          setKeyRemainingBalance(cleanKey, 0);
+        }
+        return {
+          valid: false,
+          code: errCode,
+          error:
+            data?.error ||
+            data?.message ||
+            'Не удалось активировать ключ. Проверьте код или лимит устройств.',
+          remainingRequests: typeof data?.remainingRequests === 'number' ? data.remainingRequests : undefined,
+        };
+      }
+
+      // Если сервер успешно подтвердил ключ
+      if (res.ok && data?.valid === true) {
+        saveAccessKey(cleanKey);
+        const isMaster = Boolean(data.isMaster);
+        setMasterAccessKeyActive(isMaster);
+        if (!isMaster && typeof data.remainingRequests === 'number') {
+          setKeyRemainingBalance(cleanKey, data.remainingRequests);
+        } else if (!isMaster) {
+          getKeyRemainingBalance(cleanKey);
+        }
+        notifyQuotaUpdated();
+        return {
+          valid: true,
+          isMaster,
+          remainingRequests: isMaster ? null : getKeyRemainingBalance(cleanKey),
+          storageMode: data.storageMode || 'client_fallback',
+          devicesUsed: data.devicesUsed,
+          maxDevices: data.maxDevices ?? MAX_DEVICES_PER_KEY,
+        };
+      }
+
+      // Fallback: если удаленный воркер еще не обновлен и не знает про action="verify_key",
+      // сохраняем ключ локально с балансом 500 запросов (проверка пройдет при первом запросе к ИИ)
+      saveAccessKey(cleanKey);
+      return {
+        valid: true,
+        isMaster: false,
+        remainingRequests: getKeyRemainingBalance(cleanKey),
+        storageMode: 'client_fallback',
+      };
+    } catch {
+      if (i === uniqueUrls.length - 1) {
+        // При временной недоступности сети сохраняем ключ в клиентский fallback (500 запросов)
+        saveAccessKey(cleanKey);
+        return {
+          valid: true,
+          isMaster: false,
+          remainingRequests: getKeyRemainingBalance(cleanKey),
+          storageMode: 'client_fallback',
+        };
       }
     }
-  } catch {
-    // ignore parse errors
   }
-  return 0;
-}
 
-export function incrementDailyUsageCount(): number {
-  const today = getTodayDateKey();
-  const nextCount = getDailyUsageCount() + 1;
-  try {
-    localStorage.setItem(
-      DAILY_USAGE_STORAGE_KEY,
-      JSON.stringify({ date: today, count: nextCount })
-    );
-  } catch (e) {
-    console.error('Failed to update daily usage count:', e);
-  }
-  return nextCount;
+  saveAccessKey(cleanKey);
+  return {
+    valid: true,
+    isMaster: false,
+    remainingRequests: getKeyRemainingBalance(cleanKey),
+    storageMode: 'client_fallback',
+  };
 }
 
 function getRecentRequestTimestamps(): number[] {
@@ -130,47 +391,160 @@ function recordRequestTimestamp(): void {
   }
 }
 
+function rollbackLastRequestTimestamp(): void {
+  try {
+    const recent = getRecentRequestTimestamps();
+    if (recent.length > 0) {
+      recent.pop();
+      localStorage.setItem(RECENT_TIMESTAMPS_STORAGE_KEY, JSON.stringify(recent));
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export function getQuotaStatus(): {
   hasAccessKey: boolean;
   accessKey: string;
+  isMasterKey: boolean;
+  remainingRequests: number;
+  packageLimit: number;
+  usedRequests: number;
+  starterRemaining: number;
+  keyRemaining: number | null;
+  isKeyExhausted: boolean;
+  deviceId: string;
+  // Поля обратной совместимости
   usedToday: number;
   dailyLimit: number;
   remainingToday: number;
 } {
   const accessKey = getSavedAccessKey();
   const hasAccessKey = accessKey.length > 0;
-  const dailyLimit = hasAccessKey ? PRO_DAILY_LIMIT : TRIAL_DAILY_LIMIT;
-  const usedToday = getDailyUsageCount();
-  const remainingToday = Math.max(0, dailyLimit - usedToday);
-  return {
-    hasAccessKey,
-    accessKey,
-    usedToday,
-    dailyLimit,
-    remainingToday,
-  };
-}
+  const isMasterKey = hasAccessKey && isMasterAccessKeyActive();
+  const starterRemaining = getStarterRemainingRequests();
+  const deviceId = getOrCreateDeviceId();
 
-/**
- * Checks whether an AI request is allowed under:
- * 1) Daily limit: 20/day without key, 100/day with key (resets at midnight)
- * 2) Anti-spam: min 10 seconds between requests, max 3 requests per 60 seconds
- */
-export function checkAiRequestAllowance(): QuotaCheckResult {
-  const { hasAccessKey, usedToday, dailyLimit } = getQuotaStatus();
-
-  // 1. Check daily limit first
-  if (usedToday >= dailyLimit) {
+  if (isMasterKey) {
     return {
-      allowed: false,
-      reason: 'daily_limit_reached',
-      usedToday,
-      dailyLimit,
-      hasAccessKey,
+      hasAccessKey: true,
+      accessKey,
+      isMasterKey: true,
+      remainingRequests: 999999,
+      packageLimit: PAID_PACKAGE_REQUESTS,
+      usedRequests: 0,
+      starterRemaining,
+      keyRemaining: 999999,
+      isKeyExhausted: false,
+      deviceId,
+      usedToday: 0,
+      dailyLimit: PAID_PACKAGE_REQUESTS,
+      remainingToday: 999999,
     };
   }
 
-  // 2. Check anti-spam interval (10s minimum between requests & max 3 per minute)
+  if (hasAccessKey) {
+    const keyRemaining = getKeyRemainingBalance(accessKey);
+    const usedRequests = Math.max(0, PAID_PACKAGE_REQUESTS - keyRemaining);
+    const isKeyExhausted = keyRemaining <= 0;
+    return {
+      hasAccessKey: true,
+      accessKey,
+      isMasterKey: false,
+      remainingRequests: keyRemaining,
+      packageLimit: PAID_PACKAGE_REQUESTS,
+      usedRequests,
+      starterRemaining,
+      keyRemaining,
+      isKeyExhausted,
+      deviceId,
+      usedToday: usedRequests,
+      dailyLimit: PAID_PACKAGE_REQUESTS,
+      remainingToday: keyRemaining,
+    };
+  }
+
+  const usedStarter = Math.max(0, STARTER_FREE_REQUESTS - starterRemaining);
+  return {
+    hasAccessKey: false,
+    accessKey: '',
+    isMasterKey: false,
+    remainingRequests: starterRemaining,
+    packageLimit: STARTER_FREE_REQUESTS,
+    usedRequests: usedStarter,
+    starterRemaining,
+    keyRemaining: null,
+    isKeyExhausted: false,
+    deviceId,
+    usedToday: usedStarter,
+    dailyLimit: STARTER_FREE_REQUESTS,
+    remainingToday: starterRemaining,
+  };
+}
+
+// Функции обратной совместимости
+export function getDailyUsageCount(): number {
+  return getQuotaStatus().usedRequests;
+}
+
+export function incrementDailyUsageCount(): number {
+  const status = getQuotaStatus();
+  if (status.isMasterKey) return 0;
+  if (status.hasAccessKey) {
+    const rem = decrementKeyRemainingBalance(status.accessKey);
+    return Math.max(0, PAID_PACKAGE_REQUESTS - rem);
+  }
+  const rem = decrementStarterRemainingRequests();
+  return Math.max(0, STARTER_FREE_REQUESTS - rem);
+}
+
+/**
+ * Проверяет доступность запроса к ИИ:
+ * 1) Мастер-ключ владельца — безлимит и без ограничений.
+ * 2) Наличие доступных запросов в пакете (100 стартовых или 500 по ключу).
+ * 3) Пауза 10 секунд между запросами (защита от случайного двойного нажатия) и лимит 3 запроса в минуту.
+ */
+export function checkAiRequestAllowance(): QuotaCheckResult {
+  const {
+    hasAccessKey,
+    isMasterKey,
+    remainingRequests,
+    packageLimit,
+    usedRequests,
+    isKeyExhausted,
+  } = getQuotaStatus();
+
+  if (isMasterKey) {
+    return {
+      allowed: true,
+      remainingRequests,
+      packageLimit,
+      usedRequests: 0,
+      hasAccessKey: true,
+      isMasterKey: true,
+      isKeyExhausted: false,
+      usedToday: 0,
+      dailyLimit: packageLimit,
+    };
+  }
+
+  // 1. Проверяем остаток запросов в пакете
+  if (remainingRequests <= 0) {
+    return {
+      allowed: false,
+      reason: 'daily_limit_reached',
+      remainingRequests: 0,
+      packageLimit,
+      usedRequests,
+      hasAccessKey,
+      isMasterKey: false,
+      isKeyExhausted,
+      usedToday: usedRequests,
+      dailyLimit: packageLimit,
+    };
+  }
+
+  // 2. Проверяем паузу 10 сек (защита от двойного нажатия) и минутный лимит (3 запроса в минуту)
   const now = Date.now();
   const recent = getRecentRequestTimestamps();
 
@@ -183,9 +557,14 @@ export function checkAiRequestAllowance(): QuotaCheckResult {
         allowed: false,
         reason: 'cooldown',
         waitSeconds,
-        usedToday,
-        dailyLimit,
+        remainingRequests,
+        packageLimit,
+        usedRequests,
         hasAccessKey,
+        isMasterKey: false,
+        isKeyExhausted: false,
+        usedToday: usedRequests,
+        dailyLimit: packageLimit,
       };
     }
   }
@@ -197,32 +576,44 @@ export function checkAiRequestAllowance(): QuotaCheckResult {
       allowed: false,
       reason: 'cooldown',
       waitSeconds,
-      usedToday,
-      dailyLimit,
+      remainingRequests,
+      packageLimit,
+      usedRequests,
       hasAccessKey,
+      isMasterKey: false,
+      isKeyExhausted: false,
+      usedToday: usedRequests,
+      dailyLimit: packageLimit,
     };
   }
 
   return {
     allowed: true,
-    usedToday,
-    dailyLimit,
+    remainingRequests,
+    packageLimit,
+    usedRequests,
     hasAccessKey,
+    isMasterKey: false,
+    isKeyExhausted: false,
+    usedToday: usedRequests,
+    dailyLimit: packageLimit,
   };
 }
 
 export class AiQuotaError extends Error {
-  reason: 'daily_limit_reached' | 'cooldown';
+  reason: 'daily_limit_reached' | 'quota_exhausted' | 'cooldown';
+  code: string;
   waitSeconds?: number;
 
   constructor(
-    reason: 'daily_limit_reached' | 'cooldown',
+    reason: 'daily_limit_reached' | 'quota_exhausted' | 'cooldown',
     message: string,
     waitSeconds?: number
   ) {
     super(message);
     this.name = 'AiQuotaError';
     this.reason = reason;
+    this.code = reason === 'cooldown' ? 'COOLDOWN' : 'LIMIT_REACHED';
     this.waitSeconds = waitSeconds;
   }
 }
@@ -243,13 +634,10 @@ export function extractJsonFromText(raw: string): any {
 }
 
 /**
- * Sends a POST request to https://api.smartfoodasystent.workers.dev
- * with headers:
- * {
- *   "Content-Type": "application/json",
- *   "x-access-token": savedAccessKey || ""
- * }
- * Enforces daily limits (20/day trial, 100/day with key) and anti-spam (10s interval, max 3/min).
+ * Отправляет запрос к ИИ через Cloudflare Worker / серверный прокси.
+ * - Передает ключ доступа (x-access-token) и идентификатор устройства (x-device-id).
+ * - Уменьшает счетчик запросов на 1 ТОЛЬКО после получения успешного и корректного JSON-ответа от нейросети.
+ * - При ошибках сети или сервера запросы НЕ списываются.
  */
 export async function callCloudflareWorkerAI(payload: {
   prompt: string;
@@ -263,26 +651,28 @@ export async function callCloudflareWorkerAI(payload: {
 }): Promise<any> {
   const check = checkAiRequestAllowance();
   if (!check.allowed) {
-    if (check.reason === 'daily_limit_reached') {
+    if (check.reason === 'daily_limit_reached' || check.reason === 'quota_exhausted') {
       payload.onOpenPaywall?.();
       throw new AiQuotaError(
         'daily_limit_reached',
         check.hasAccessKey
-          ? 'Достигнут суточный лимит (100 запросов в день). Лимит обновится в полночь.'
-          : 'Достигнут суточный лимит пробного режима (20 запросов в сутки). Оформите годовой доступ для увеличения лимита до 100 запросов в день.'
+          ? 'Лимит в 500 ИИ-запросов по вашему ключу исчерпан. Пожалуйста, приобретите новый пакет на 500 запросов или введите новый ключ активации.'
+          : 'Стартовый пакет из 100 бесплатных ИИ-запросов исчерпан. Приобретите дополнительный пакет на 500 запросов или введите ключ активации.'
       );
     }
     throw new AiQuotaError(
       'cooldown',
-      `Пожалуйста, подождите ${check.waitSeconds || 10} сек. перед следующим запросом (защита от спама: интервал 10 сек, не более 3 запросов в минуту).`,
+      `Пожалуйста, подождите ${check.waitSeconds || 10} сек. перед следующим запросом (защита от двойного нажатия: пауза 10 сек, лимит 3 запроса в минуту).`,
       check.waitSeconds
     );
   }
 
-  // Record timestamp for anti-spam protection before firing
+  // Фиксируем метку времени для защиты от случайного двойного нажатия
   recordRequestTimestamp();
 
   const savedAccessKey = getSavedAccessKey();
+  const deviceId = getOrCreateDeviceId();
+
   const fullTextPrompt = payload.systemInstruction
     ? `${payload.systemInstruction.trim()}\n\n${payload.prompt.trim()}`
     : payload.prompt.trim();
@@ -311,6 +701,9 @@ export async function callCloudflareWorkerAI(payload: {
       responseMimeType: 'application/json',
       temperature: 0.2,
     },
+    accessKey: savedAccessKey || '',
+    deviceId,
+    action: payload.action || 'ai_request',
     ...(payload.extraPayload || {}),
   };
 
@@ -319,12 +712,16 @@ export async function callCloudflareWorkerAI(payload: {
     headers: {
       'Content-Type': 'application/json',
       'x-access-token': savedAccessKey || '',
+      'x-device-id': deviceId,
     },
     body: JSON.stringify(requestBody),
   };
 
-  // Build candidate endpoints: relative /api on the same domain first, then full Worker URLs as fallback
-  const candidateUrls: string[] = ['/api', CLOUDFLARE_WORKER_URL, 'https://api.smartfoodasystent.workers.dev/'];
+  const candidateUrls: string[] = [
+    '/api',
+    CLOUDFLARE_WORKER_URL,
+    'https://api.smartfoodasystent.workers.dev/',
+  ];
   const uniqueUrls = Array.from(new Set(candidateUrls));
 
   let response: Response | null = null;
@@ -334,7 +731,6 @@ export async function callCloudflareWorkerAI(payload: {
     const endpoint = uniqueUrls[i];
     try {
       const res = await fetch(endpoint, requestInit);
-      // If static server returned 404 or 405 Method Not Allowed on this endpoint, try the next fallback endpoint
       if ((res.status === 404 || res.status === 405) && i < uniqueUrls.length - 1) {
         continue;
       }
@@ -343,31 +739,69 @@ export async function callCloudflareWorkerAI(payload: {
     } catch (netErr) {
       lastNetworkError = netErr;
       if (i === uniqueUrls.length - 1) {
+        rollbackLastRequestTimestamp();
         throw netErr;
       }
     }
   }
 
   if (!response) {
+    rollbackLastRequestTimestamp();
     throw lastNetworkError || new Error('Не удалось связаться с сервером ИИ');
   }
 
-  if (response.status === 401 || response.status === 402 || response.status === 403 || response.status === 429) {
-    payload.onOpenPaywall?.();
+  if (
+    response.status === 401 ||
+    response.status === 402 ||
+    response.status === 403 ||
+    response.status === 429
+  ) {
     let errText = '';
+    let errCode = '';
+    let errRemaining: number | undefined = undefined;
+    let errWaitSeconds: number | undefined = undefined;
+
     try {
       const errJson = await response.json();
       errText = errJson?.error?.message || errJson?.error || errJson?.message || '';
+      errCode = errJson?.code || '';
+      if (typeof errJson?.remainingRequests === 'number') {
+        errRemaining = errJson.remainingRequests;
+      }
+      if (typeof errJson?.waitSeconds === 'number') {
+        errWaitSeconds = errJson.waitSeconds;
+      }
     } catch {
       // ignore
     }
+
+    // Если это минутный лимит (3 запроса в минуту) или пауза 10 секунд — НЕ открываем окно покупки
+    if (response.status === 429 || errCode === 'COOLDOWN' || errCode === 'RATE_LIMIT') {
+      throw new AiQuotaError(
+        'cooldown',
+        errText || 'Пожалуйста, подождите 10 секунд перед следующим запросом (лимит 3 запроса в минуту).',
+        errWaitSeconds
+      );
+    }
+
+    // При исчерпании 500 запросов по ключу синхронизируем баланс с нулем
+    if (savedAccessKey && (errCode === 'KEY_EXHAUSTED' || errRemaining === 0)) {
+      setKeyRemainingBalance(savedAccessKey, 0);
+    }
+
+    rollbackLastRequestTimestamp();
+    payload.onOpenPaywall?.();
     throw new AiQuotaError(
       'daily_limit_reached',
-      errText || 'Лимит запросов исчерпан или требуется ключ годового доступа.'
+      errText ||
+        (savedAccessKey
+          ? 'Лимит запросов по ключу исчерпан или превышен лимит устройств (максимум 2 устройства). Пожалуйста, введите новый ключ.'
+          : 'Стартовый пакет из 100 бесплатных ИИ-запросов исчерпан. Приобретите пакет на 500 запросов или введите ключ активации.')
     );
   }
 
   if (!response.ok) {
+    rollbackLastRequestTimestamp();
     let errMsg = `Ошибка сервера ИИ (${response.status})`;
     try {
       const errData = await response.json();
@@ -378,32 +812,74 @@ export async function callCloudflareWorkerAI(payload: {
     throw new Error(errMsg);
   }
 
-  // Increment daily counter upon successful response
-  const updatedCount = incrementDailyUsageCount();
-  payload.onQuotaUsed?.(updatedCount);
-
-  const data = await response.json();
-
-  // Handle Gemini GenerateContentResponse format
-  const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (typeof candidateText === 'string' && candidateText.trim()) {
-    return extractJsonFromText(candidateText);
+  let data: any;
+  try {
+    data = await response.json();
+  } catch (parseErr) {
+    rollbackLastRequestTimestamp();
+    throw new Error('Получен некорректный ответ от сервера ИИ');
   }
 
-  // Handle wrapper formats ({ text: "..." } or { result: "..." } or OpenAI choices)
-  if (typeof data?.text === 'string' && data.text.trim()) {
-    return extractJsonFromText(data.text);
-  }
-  if (typeof data?.result === 'string' && data.result.trim()) {
-    return extractJsonFromText(data.result);
-  }
-  const choiceContent = data?.choices?.[0]?.message?.content;
-  if (typeof choiceContent === 'string' && choiceContent.trim()) {
-    return extractJsonFromText(choiceContent);
+  // Сначала проверяем и парсим ответ от нейросети (чтобы убедиться, что он успешный и корректный)
+  let parsedResult: any = null;
+  try {
+    const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (typeof candidateText === 'string' && candidateText.trim()) {
+      parsedResult = extractJsonFromText(candidateText);
+    } else if (typeof data?.text === 'string' && data.text.trim()) {
+      parsedResult = extractJsonFromText(data.text);
+    } else if (typeof data?.result === 'string' && data.result.trim()) {
+      parsedResult = extractJsonFromText(data.result);
+    } else if (typeof data?.choices?.[0]?.message?.content === 'string' && data.choices[0].message.content.trim()) {
+      parsedResult = extractJsonFromText(data.choices[0].message.content);
+    } else if (data && typeof data === 'object' && !data.error && !data.candidates) {
+      parsedResult = data;
+    }
+  } catch (jsonErr) {
+    rollbackLastRequestTimestamp();
+    throw new Error('Нейросеть вернула неполный ответ. Запрос не был списан, попробуйте ещё раз.');
   }
 
-  // Otherwise assume data is already the JSON object
-  return data;
+  if (!parsedResult || typeof parsedResult !== 'object') {
+    rollbackLastRequestTimestamp();
+    throw new Error('Пустой ответ от нейросети. Запрос не был списан.');
+  }
+
+  // Списываем 1 запрос ТОЛЬКО после того, как получен успешный и корректный ответ от ИИ
+  const isMasterFromServer =
+    Boolean(data?._quota?.isMaster) || response.headers.get('x-is-master') === 'true';
+
+  if (isMasterFromServer) {
+    setMasterAccessKeyActive(true);
+  } else if (savedAccessKey) {
+    setMasterAccessKeyActive(false);
+    const headerRem = response.headers.get('x-remaining-requests');
+    const serverRemaining =
+      typeof data?._quota?.remainingRequests === 'number'
+        ? data._quota.remainingRequests
+        : typeof data?.remainingRequests === 'number'
+        ? data.remainingRequests
+        : headerRem !== null && headerRem !== '' && !Number.isNaN(Number(headerRem))
+        ? Number(headerRem)
+        : null;
+
+    if (serverRemaining !== null) {
+      // Серверное хранилище вернуло точный остаток по ключу
+      setKeyRemainingBalance(savedAccessKey, serverRemaining);
+    } else {
+      // Fallback: если серверное хранилище еще не подключено, клиент сам уменьшает баланс из 500 на 1
+      decrementKeyRemainingBalance(savedAccessKey);
+    }
+  } else {
+    // Пользователь использует стартовый пакет из 100 бесплатных запросов
+    decrementStarterRemainingRequests();
+  }
+
+  const updatedStatus = getQuotaStatus();
+  payload.onQuotaUsed?.(updatedStatus.usedRequests);
+  notifyQuotaUpdated();
+
+  return parsedResult;
 }
 
 /**
@@ -791,5 +1267,3 @@ Return strictly a valid JSON object with top-level core macros AND a "targets" o
     onQuotaUsed: params.onQuotaUsed,
   });
 }
-
-
