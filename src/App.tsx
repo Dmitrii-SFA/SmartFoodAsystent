@@ -1651,6 +1651,7 @@ export default function App() {
                 });
                 setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 3000);
               }}
+              onAddToShoppingList={handleAddToShoppingList}
             />
           </div>
         )}

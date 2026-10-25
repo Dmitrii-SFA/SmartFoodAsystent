@@ -21,6 +21,8 @@ import {
   EyeOff,
   SlidersHorizontal,
   ChevronDown,
+  ChevronUp,
+  ShoppingCart,
 } from 'lucide-react';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { getNutrientColor } from '../utils/nutrientColors';
@@ -48,6 +50,7 @@ interface FoodLibraryTabProps {
     amountGrams: number;
     nutrients: Record<string, number>;
   }) => void;
+  onAddToShoppingList?: (item: { name: string; quantity?: string; foodId?: string }) => void;
   preselectedMealCategoryId?: string | null;
   onClearPreselectedMealCategory?: () => void;
   onOpenPaywallModal?: () => void;
@@ -67,6 +70,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
   onSaveToLibrary,
   onDeleteFromLibrary,
   onAddFoodToDayLog,
+  onAddToShoppingList,
   preselectedMealCategoryId,
   onClearPreselectedMealCategory,
   onOpenPaywallModal,
@@ -128,6 +132,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
   const [isNutrientVisibilityModalOpen, setIsNutrientVisibilityModalOpen] = useState(false);
 
   // Additional nutrients management inside Add Product modal
+  const [isSecondaryNutrientsExpanded, setIsSecondaryNutrientsExpanded] = useState(false);
   const [isAddNutrientMenuOpen, setIsAddNutrientMenuOpen] = useState(false);
   const [isCreatingNutrientMode, setIsCreatingNutrientMode] = useState(false);
   const [customAddedMetricIds, setCustomAddedMetricIds] = useState<string[]>([]);
@@ -218,6 +223,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
     setFormServingGramsStr('100');
     setFormNutrients({});
     setCustomAddedMetricIds([]);
+    setIsSecondaryNutrientsExpanded(false);
     setIsAddNutrientMenuOpen(false);
     setIsCreatingNutrientMode(false);
     setNewNutrientError(null);
@@ -260,7 +266,10 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
       if (!formName.trim() && data.name) {
         setFormName(data.name);
       }
-      if (data.nutrients) setFormNutrients(data.nutrients);
+      if (data.nutrients) {
+        setFormNutrients(data.nutrients);
+        setIsSecondaryNutrientsExpanded(false);
+      }
       if (data.note) setAnalysisNote(data.note);
     } catch (err: any) {
       setValidationError(err?.message || 'Не удалось рассчитать нутриенты');
@@ -296,7 +305,10 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
         setFormServingGrams(data.servingSizeGrams);
         setFormServingGramsStr(String(data.servingSizeGrams));
       }
-      if (data.nutrients) setFormNutrients(data.nutrients);
+      if (data.nutrients) {
+        setFormNutrients(data.nutrients);
+        setIsSecondaryNutrientsExpanded(false);
+      }
       if (data.confidenceNote) setAnalysisNote(data.confidenceNote);
     } catch (err: any) {
       setValidationError(err?.message || 'Ошибка распознавания фото');
@@ -475,6 +487,23 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
+                  {onAddToShoppingList && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onAddToShoppingList({
+                          name: item.name,
+                          quantity: `${item.servingSizeGrams || 100} ${t.gramsShort}`,
+                          foodId: item.id,
+                        })
+                      }
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-emerald-400 hover:bg-emerald-950/30 transition active:scale-95 shrink-0"
+                      title={t.addToShoppingList}
+                    >
+                      <ShoppingCart className="w-4 h-4" />
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => {
@@ -799,12 +828,12 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
 
               {/* Nutrients Fields */}
               <div className="space-y-3 pt-2 border-t border-slate-800">
-                {/* ROW 1: 4 Core Protected Nutrients */}
+                {/* ROW 1: 4 Core Protected Nutrients (always visible at the top) */}
                 <div className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-slate-200 flex items-center gap-1.5">
                       <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                      <span>Строка 1: Базовые КБЖУ (защищённые)</span>
+                      <span>Основные нутриенты (КБЖУ)</span>
                     </span>
                     <span className="text-[10px] text-emerald-400/90 font-mono font-medium">обязательные</span>
                   </div>
@@ -851,7 +880,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                   </div>
                 </div>
 
-                {/* ROWS 2+: Secondary & Custom Nutrients */}
+                {/* ROWS 2+: Secondary & Custom Nutrients (collapsed by default under toggle button) */}
                 {(() => {
                   const secondaryMetricsInForm = metrics.filter(
                     (m) =>
@@ -864,6 +893,10 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                       )
                   );
 
+                  const filledSecondaryCount = secondaryMetricsInForm.filter(
+                    (m) => Number(formNutrients[m.id]) > 0
+                  ).length;
+
                   const availableToAddMetrics = metrics.filter(
                     (m) =>
                       !CORE_METRIC_IDS.includes(m.id) &&
@@ -872,224 +905,255 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                   );
 
                   return (
-                    <div className="p-3 rounded-2xl bg-slate-900/40 border border-slate-800/80 space-y-2.5">
-                      <div className="flex items-center justify-between text-xs flex-wrap gap-2">
-                        <span className="font-bold text-slate-200 flex items-center gap-1.5">
-                          <span>Строки 2+: Дополнительные нутриенты</span>
-                          <span className="text-[10px] text-slate-400 font-normal">
-                            ({secondaryMetricsInForm.length} в форме)
-                          </span>
-                        </span>
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsSecondaryNutrientsExpanded((prev) => !prev)}
+                        className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800 text-xs text-slate-300 hover:text-white transition"
+                      >
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold">Дополнительные нутриенты</span>
+                          {filledSecondaryCount > 0 ? (
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-mono font-bold">
+                              заполнено: {filledSecondaryCount}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-400 text-[10px] font-mono">
+                              {secondaryMetricsInForm.length} доступно
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 text-[11px] text-slate-400 shrink-0">
+                          <span>{isSecondaryNutrientsExpanded ? 'Свернуть' : 'Развернуть'}</span>
+                          {isSecondaryNutrientsExpanded ? (
+                            <ChevronUp className="w-4 h-4 text-slate-400" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-slate-400" />
+                          )}
+                        </div>
+                      </button>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsAddNutrientMenuOpen(!isAddNutrientMenuOpen);
-                            setIsCreatingNutrientMode(false);
-                            setNewNutrientError(null);
-                          }}
-                          className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg border border-emerald-500/40 bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 transition active:scale-95"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Добавить нутриент</span>
-                        </button>
-                      </div>
+                      {isSecondaryNutrientsExpanded && (
+                        <div className="p-3 rounded-2xl bg-slate-900/40 border border-slate-800/80 space-y-2.5 animate-in fade-in duration-150">
+                          <div className="flex items-center justify-between text-xs flex-wrap gap-2">
+                            <span className="font-bold text-slate-200 flex items-center gap-1.5">
+                              <span>Витамины, минералы и другие нутриенты</span>
+                              <span className="text-[10px] text-slate-400 font-normal">
+                                ({secondaryMetricsInForm.length} в форме)
+                              </span>
+                            </span>
 
-                      {/* Add Nutrient Popover / Menu */}
-                      {isAddNutrientMenuOpen && (
-                        <div className="p-3 rounded-xl bg-slate-800/95 border border-slate-700 space-y-3 animate-in fade-in duration-150">
-                          <div className="flex items-center justify-between border-b border-slate-700/80 pb-2">
-                            <span className="text-xs font-bold text-white">Добавить нутриент к продукту:</span>
                             <button
                               type="button"
-                              onClick={() => setIsAddNutrientMenuOpen(false)}
-                              className="text-slate-400 hover:text-white p-0.5"
+                              onClick={() => {
+                                setIsAddNutrientMenuOpen(!isAddNutrientMenuOpen);
+                                setIsCreatingNutrientMode(false);
+                                setNewNutrientError(null);
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg border border-emerald-500/40 bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 transition active:scale-95"
                             >
-                              <X className="w-3.5 h-3.5" />
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Добавить нутриент</span>
                             </button>
                           </div>
 
-                          {!isCreatingNutrientMode ? (
-                            <div className="space-y-2.5">
-                              {availableToAddMetrics.length > 0 && (
-                                <div>
-                                  <span className="text-[11px] text-slate-400 block mb-1.5">
-                                    Выберите из существующих нутриентов:
-                                  </span>
-                                  <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
-                                    {availableToAddMetrics.map((m) => (
-                                      <button
-                                        key={m.id}
-                                        type="button"
-                                        onClick={() => handleAddExistingMetricToForm(m.id)}
-                                        className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-lg border border-slate-700 bg-slate-900/80 hover:bg-slate-700 text-slate-200 hover:text-white transition active:scale-95"
-                                      >
-                                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color }} />
-                                        <span>{m.label} ({m.unit})</span>
-                                        <Plus className="w-3 h-3 text-emerald-400" />
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-
-                              <div className="pt-2 border-t border-slate-700/60 flex items-center justify-between">
-                                <span className="text-[11px] text-slate-400">Нужного нутриента нет в списке?</span>
+                          {/* Add Nutrient Popover / Menu */}
+                          {isAddNutrientMenuOpen && (
+                            <div className="p-3 rounded-xl bg-slate-800/95 border border-slate-700 space-y-3 animate-in fade-in duration-150">
+                              <div className="flex items-center justify-between border-b border-slate-700/80 pb-2">
+                                <span className="text-xs font-bold text-white">Добавить нутриент к продукту:</span>
                                 <button
                                   type="button"
-                                  onClick={() => setIsCreatingNutrientMode(true)}
-                                  className="flex items-center gap-1 text-[11px] font-bold text-purple-300 hover:text-purple-200"
+                                  onClick={() => setIsAddNutrientMenuOpen(false)}
+                                  className="text-slate-400 hover:text-white p-0.5"
                                 >
-                                  <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                                  <span>+ Создать новый нутриент</span>
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            /* Inline New Nutrient Creator */
-                            <form onSubmit={handleCreateNewNutrient} className="space-y-2.5">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-bold text-purple-300 flex items-center gap-1">
-                                  <Sparkles className="w-3.5 h-3.5" />
-                                  <span>Создание нового нутриента</span>
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => setIsCreatingNutrientMode(false)}
-                                  className="text-[10px] text-slate-400 hover:text-slate-200"
-                                >
-                                  ← Назад к выбору
+                                  <X className="w-3.5 h-3.5" />
                                 </button>
                               </div>
 
-                              {newNutrientError && (
-                                <div className="p-1.5 rounded-lg bg-red-950/60 border border-red-800 text-[10px] text-red-300">
-                                  {newNutrientError}
-                                </div>
-                              )}
+                              {!isCreatingNutrientMode ? (
+                                <div className="space-y-2.5">
+                                  {availableToAddMetrics.length > 0 && (
+                                    <div>
+                                      <span className="text-[11px] text-slate-400 block mb-1.5">
+                                        Выберите из существующих нутриентов:
+                                      </span>
+                                      <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
+                                        {availableToAddMetrics.map((m) => (
+                                          <button
+                                            key={m.id}
+                                            type="button"
+                                            onClick={() => handleAddExistingMetricToForm(m.id)}
+                                            className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-lg border border-slate-700 bg-slate-900/80 hover:bg-slate-700 text-slate-200 hover:text-white transition active:scale-95"
+                                          >
+                                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color }} />
+                                            <span>{m.label} ({m.unit})</span>
+                                            <Plus className="w-3 h-3 text-emerald-400" />
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
 
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <div>
-                                  <label className="block text-[10px] text-slate-400 mb-0.5">Название нутриента *</label>
-                                  <input
-                                    type="text"
-                                    required
-                                    placeholder="например: Омега-3, Кофеин, Креатин"
-                                    value={newNutrientName}
-                                    onChange={(e) => setNewNutrientName(e.target.value)}
-                                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white"
-                                  />
-                                </div>
-                                <div className="grid grid-cols-2 gap-1.5">
-                                  <div>
-                                    <label className="block text-[10px] text-slate-400 mb-0.5">Единица</label>
-                                    <select
-                                      value={newNutrientUnit}
-                                      onChange={(e) => setNewNutrientUnit(e.target.value)}
-                                      className="w-full px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white"
+                                  <div className="pt-2 border-t border-slate-700/60 flex items-center justify-between">
+                                    <span className="text-[11px] text-slate-400">Нужного нутриента нет в списке?</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsCreatingNutrientMode(true)}
+                                      className="flex items-center gap-1 text-[11px] font-bold text-purple-300 hover:text-purple-200"
                                     >
-                                      <option value="г">г (граммы)</option>
-                                      <option value="мг">мг (миллиграммы)</option>
-                                      <option value="мкг">мкг (микрограммы)</option>
-                                      <option value="мл">мл (миллилитры)</option>
-                                    </select>
+                                      <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                                      <span>+ Создать новый нутриент</span>
+                                    </button>
                                   </div>
-                                  <div>
-                                    <label className="block text-[10px] text-slate-400 mb-0.5">Суточная норма</label>
+                                </div>
+                              ) : (
+                                /* Inline New Nutrient Creator */
+                                <form onSubmit={handleCreateNewNutrient} className="space-y-2.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-purple-300 flex items-center gap-1">
+                                      <Sparkles className="w-3.5 h-3.5" />
+                                      <span>Создание нового нутриента</span>
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsCreatingNutrientMode(false)}
+                                      className="text-[10px] text-slate-400 hover:text-slate-200"
+                                    >
+                                      ← Назад к выбору
+                                    </button>
+                                  </div>
+
+                                  {newNutrientError && (
+                                    <div className="p-1.5 rounded-lg bg-red-950/60 border border-red-800 text-[10px] text-red-300">
+                                      {newNutrientError}
+                                    </div>
+                                  )}
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="block text-[10px] text-slate-400 mb-0.5">Название нутриента *</label>
+                                      <input
+                                        type="text"
+                                        required
+                                        placeholder="например: Омега-3, Кофеин, Креатин"
+                                        value={newNutrientName}
+                                        onChange={(e) => setNewNutrientName(e.target.value)}
+                                        className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white"
+                                      />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                      <div>
+                                        <label className="block text-[10px] text-slate-400 mb-0.5">Единица</label>
+                                        <select
+                                          value={newNutrientUnit}
+                                          onChange={(e) => setNewNutrientUnit(e.target.value)}
+                                          className="w-full px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white"
+                                        >
+                                          <option value="г">г (граммы)</option>
+                                          <option value="мг">мг (миллиграммы)</option>
+                                          <option value="мкг">мкг (микрограммы)</option>
+                                          <option value="мл">мл (миллилитры)</option>
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-[10px] text-slate-400 mb-0.5">Суточная норма</label>
+                                        <input
+                                          type="number"
+                                          value={newNutrientTarget}
+                                          onChange={(e) => setNewNutrientTarget(e.target.value)}
+                                          className="w-full px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white font-mono"
+                                          placeholder="50"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center justify-between pt-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[10px] text-slate-400">Цвет:</span>
+                                      {['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#eab308', '#06b6d4'].map((col) => (
+                                        <button
+                                          key={col}
+                                          type="button"
+                                          onClick={() => setNewNutrientColor(col)}
+                                          className={`w-4 h-4 rounded-full transition ${newNutrientColor === col ? 'ring-2 ring-white scale-110' : 'opacity-70'}`}
+                                          style={{ backgroundColor: col }}
+                                        />
+                                      ))}
+                                    </div>
+
+                                    <button
+                                      type="submit"
+                                      className="px-3 py-1.5 text-xs font-bold rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition shadow-xs"
+                                    >
+                                      Создать и привязать
+                                    </button>
+                                  </div>
+                                </form>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Secondary Fields Grid */}
+                          {secondaryMetricsInForm.length > 0 ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono">
+                              {secondaryMetricsInForm.map((metric) => {
+                                const mColor = metric.color || getNutrientColor(metric.id, metrics);
+                                return (
+                                  <div key={metric.id} className="min-w-0 relative group">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <label className="flex items-center gap-1.5 text-[11px] text-slate-300 truncate">
+                                        <span
+                                          className="w-2 h-2 rounded-full shrink-0 shadow-xs"
+                                          style={{ backgroundColor: mColor }}
+                                        />
+                                        <span className="truncate">{metric.label} ({metric.unit})</span>
+                                      </label>
+                                      {customAddedMetricIds.includes(metric.id) && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveMetricFromForm(metric.id)}
+                                          className="p-0.5 text-slate-500 hover:text-red-400"
+                                          title="Убрать нутриент из этого продукта"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      )}
+                                    </div>
                                     <input
                                       type="number"
-                                      value={newNutrientTarget}
-                                      onChange={(e) => setNewNutrientTarget(e.target.value)}
-                                      className="w-full px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white font-mono"
-                                      placeholder="50"
+                                      step="any"
+                                      value={formNutrients[metric.id] !== undefined ? formNutrients[metric.id] : ''}
+                                      onChange={(e) => {
+                                        const v = e.target.value;
+                                        if (v === '') {
+                                          setFormNutrients((prev) => {
+                                            const copy = { ...prev };
+                                            delete copy[metric.id];
+                                            return copy;
+                                          });
+                                        } else {
+                                          const n = parseFloat(v);
+                                          setFormNutrients((prev) => ({
+                                            ...prev,
+                                            [metric.id]: isNaN(n) ? 0 : n,
+                                          }));
+                                        }
+                                      }}
+                                      placeholder="0"
+                                      className="w-full px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-white font-mono text-xs focus:outline-hidden"
+                                      style={{ borderColor: `${mColor}40` }}
                                     />
                                   </div>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center justify-between pt-1">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] text-slate-400">Цвет:</span>
-                                  {['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#eab308', '#06b6d4'].map((col) => (
-                                    <button
-                                      key={col}
-                                      type="button"
-                                      onClick={() => setNewNutrientColor(col)}
-                                      className={`w-4 h-4 rounded-full transition ${newNutrientColor === col ? 'ring-2 ring-white scale-110' : 'opacity-70'}`}
-                                      style={{ backgroundColor: col }}
-                                    />
-                                  ))}
-                                </div>
-
-                                <button
-                                  type="submit"
-                                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition shadow-xs"
-                                >
-                                  Создать и привязать
-                                </button>
-                              </div>
-                            </form>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="text-center py-2 text-[11px] text-slate-500 italic">
+                              Дополнительные нутриенты не выбраны. Нажмите «+ Добавить нутриент» выше.
+                            </div>
                           )}
-                        </div>
-                      )}
-
-                      {/* Secondary Fields Grid */}
-                      {secondaryMetricsInForm.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono">
-                          {secondaryMetricsInForm.map((metric) => {
-                            const mColor = metric.color || getNutrientColor(metric.id, metrics);
-                            return (
-                              <div key={metric.id} className="min-w-0 relative group">
-                                <div className="flex items-center justify-between mb-1">
-                                  <label className="flex items-center gap-1.5 text-[11px] text-slate-300 truncate">
-                                    <span
-                                      className="w-2 h-2 rounded-full shrink-0 shadow-xs"
-                                      style={{ backgroundColor: mColor }}
-                                    />
-                                    <span className="truncate">{metric.label} ({metric.unit})</span>
-                                  </label>
-                                  {customAddedMetricIds.includes(metric.id) && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveMetricFromForm(metric.id)}
-                                      className="p-0.5 text-slate-500 hover:text-red-400"
-                                      title="Убрать нутриент из этого продукта"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                </div>
-                                <input
-                                  type="number"
-                                  step="any"
-                                  value={formNutrients[metric.id] !== undefined ? formNutrients[metric.id] : ''}
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    if (v === '') {
-                                      setFormNutrients((prev) => {
-                                        const copy = { ...prev };
-                                        delete copy[metric.id];
-                                        return copy;
-                                      });
-                                    } else {
-                                      const n = parseFloat(v);
-                                      setFormNutrients((prev) => ({
-                                        ...prev,
-                                        [metric.id]: isNaN(n) ? 0 : n,
-                                      }));
-                                    }
-                                  }}
-                                  placeholder="0"
-                                  className="w-full px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-white font-mono text-xs focus:outline-hidden"
-                                  style={{ borderColor: `${mColor}40` }}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="text-center py-2 text-[11px] text-slate-500 italic">
-                          Дополнительные нутриенты не выбраны. Нажмите «+ Добавить нутриент» выше.
                         </div>
                       )}
                     </div>
