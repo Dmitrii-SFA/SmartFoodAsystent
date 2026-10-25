@@ -699,3 +699,97 @@ Return your response strictly as valid JSON adhering to this structure:
     onQuotaUsed: params.onQuotaUsed,
   });
 }
+
+/**
+ * 6. Calculate personalized Daily Norm for all selected nutrients via AI
+ */
+export async function calculateDailyNormWithWorker(params: {
+  gender: 'male' | 'female';
+  age: number;
+  weightKg: number;
+  heightCm: number;
+  goalLabel: string;
+  activityDescription: string;
+  trackedMetrics?: Array<{ id: string; label: string; unit: string }>;
+  langCode?: string;
+  onOpenPaywall?: () => void;
+  onQuotaUsed?: (newUsedCount: number) => void;
+}): Promise<{
+  calories: number;
+  proteins: number;
+  fats: number;
+  carbs: number;
+  water: number;
+  fiber?: number;
+  sugar?: number;
+  targets?: Record<string, number>;
+  note?: string;
+}> {
+  const lang = (params.langCode || 'ru').toLowerCase();
+  const responseLang = lang.startsWith('en')
+    ? 'English'
+    : lang.startsWith('pl')
+    ? 'Polish'
+    : 'Russian';
+
+  const metricsListText =
+    params.trackedMetrics && params.trackedMetrics.length > 0
+      ? params.trackedMetrics
+          .map((m) => `- "${m.id}": ${m.label} (unit: ${m.unit})`)
+          .join('\n')
+      : `- "calories": Calories (unit: kcal)\n- "proteins": Proteins (unit: g)\n- "fats": Fats (unit: g)\n- "carbs": Carbohydrates (unit: g)\n- "water": Water (unit: ml)\n- "fiber": Fiber (unit: g)\n- "sugar": Sugar (unit: g)`;
+
+  const exampleTargetsObj: Record<string, number> = {
+    calories: 2100,
+    proteins: 135,
+    fats: 70,
+    carbs: 230,
+    water: 2500,
+    fiber: 28,
+    sugar: 30,
+  };
+  if (params.trackedMetrics) {
+    params.trackedMetrics.forEach((m) => {
+      if (!(m.id in exampleTargetsObj)) {
+        exampleTargetsObj[m.id] = 100;
+      }
+    });
+  }
+
+  const prompt = `
+Calculate accurate daily nutritional norms for a person with the following parameters:
+- Gender: ${params.gender === 'male' ? 'Male (Мужской)' : 'Female (Женский)'}
+- Age: ${params.age} years
+- Weight: ${params.weightKg} kg
+- Height: ${params.heightCm} cm
+- Physical Activity: "${params.activityDescription}"
+- Goal: "${params.goalLabel}"
+
+The user has selected the following nutrients to track daily (calculate the optimal daily target in the specified unit for EVERY nutrient in this list):
+${metricsListText}
+
+Carefully evaluate the exact physical activity described (including custom sports, steps, job type, workout frequency, or lifestyle) and calculate realistic daily energy expenditure, macro targets, and micronutrient/secondary targets for all listed nutrients.
+
+Return strictly a valid JSON object with top-level core macros AND a "targets" object containing numeric values for EVERY requested nutrient ID:
+{
+  "calories": 2100,
+  "proteins": 135,
+  "fats": 70,
+  "carbs": 230,
+  "water": 2500,
+  "fiber": 28,
+  "sugar": 30,
+  "targets": ${JSON.stringify(exampleTargetsObj)},
+  "note": "Brief 1-2 sentence explanation in ${responseLang} of how the activity and parameters shaped these daily norms"
+}
+`;
+
+  return callCloudflareWorkerAI({
+    prompt,
+    action: 'calculate_daily_norm',
+    onOpenPaywall: params.onOpenPaywall,
+    onQuotaUsed: params.onQuotaUsed,
+  });
+}
+
+

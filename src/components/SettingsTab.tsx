@@ -567,23 +567,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         )}
       </div>
 
-      {/* 3. Настроить дневную норму */}
-      <div className="relative z-10">
-        <DailyNormCalculator
-          metrics={config.metrics}
-          onUpdateMetrics={onUpdateMetrics}
-          themeStyles={themeStyles}
-          accentColor={config.theme.accentColor}
-          borderRadius={config.theme.borderRadius}
-          apiKey={apiKey}
-          isCollapsed={!openSections.dailyNorm}
-          onToggleCollapse={() => toggleSection('dailyNorm')}
-          langCode={config.language?.code}
-          labels={config.language?.labels}
-        />
-      </div>
-
-      {/* 4. Настройка всех нутриентов и норм (теперь полностью сворачивается) */}
+      {/* 3. Настройка всех нутриентов и норм (теперь между языком интерфейса и суточной нормой) */}
       <div className="relative z-10">
         <NutrientsManager
           metrics={config.metrics}
@@ -596,6 +580,23 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           onToggleCollapse={() => toggleSection('nutrients')}
           langCode={config.language?.code}
           labels={config.language?.labels}
+        />
+      </div>
+
+      {/* 4. Суточная норма */}
+      <div className="relative z-10">
+        <DailyNormCalculator
+          metrics={config.metrics}
+          onUpdateMetrics={onUpdateMetrics}
+          themeStyles={themeStyles}
+          accentColor={config.theme.accentColor}
+          borderRadius={config.theme.borderRadius}
+          apiKey={apiKey}
+          isCollapsed={!openSections.dailyNorm}
+          onToggleCollapse={() => toggleSection('dailyNorm')}
+          langCode={config.language?.code}
+          labels={config.language?.labels}
+          onOpenPaywallModal={onOpenApiKeyModal}
         />
       </div>
 
