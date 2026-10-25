@@ -1176,33 +1176,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    let active = true;
-    const localRaw = localStorage.getItem(APP_ICON_STORAGE_KEY);
-    const localId = localRaw ? parseInt(localRaw, 10) : 0;
-
-    if (localId >= 1 && localId <= 10) {
-      applyAppIconToDocument(localId, config.language?.code || 'ru');
-    } else {
-      fetch('/api/app-icon')
-        .then((r) => r.json())
-        .then((data) => {
-          if (!active) return;
-          const serverIconId = Number(data?.iconId) || 1;
-          setLockedIconId(serverIconId);
-          try {
-            localStorage.setItem(APP_ICON_STORAGE_KEY, String(serverIconId));
-          } catch {
-            // ignore
-          }
-          applyAppIconToDocument(serverIconId, config.language?.code || 'ru');
-        })
-        .catch(() => {
-          applyAppIconToDocument(lockedIconId, config.language?.code || 'ru');
-        });
-    }
-    return () => {
-      active = false;
-    };
+    applyAppIconToDocument(lockedIconId, config.language?.code || 'ru');
   }, [lockedIconId, config.language?.code]);
 
   // Unlock mobile Web Audio on first user touch/click so scheduled meal alarms can play sound on phones

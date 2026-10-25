@@ -1060,6 +1060,55 @@ app.post('/api/app-icon', (req: Request, res: Response) => {
   }
 });
 
+app.get('/api', (_req: Request, res: Response) => {
+  res.json({ status: 'ok', service: 'Smart Food Assistance Local Dev Proxy' });
+});
+
+app.post('/api', async (req: Request, res: Response) => {
+  try {
+    const requestData = req.body || {};
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    // If GEMINI_API_KEY is available in local environment, call Google Gemini directly (same as worker.js)
+    if (apiKey) {
+      const targetModel = requestData.model || 'gemini-2.5-flash-lite';
+      const googleUrl = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
+
+      const geminiPayload = {
+        contents: requestData.contents,
+        ...(requestData.generationConfig
+          ? { generationConfig: requestData.generationConfig }
+          : {}),
+      };
+
+      const geminiResponse = await fetch(googleUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(geminiPayload),
+      });
+
+      const result = await geminiResponse.json();
+      res.status(geminiResponse.status).json(result);
+      return;
+    }
+
+    // Otherwise proxy to the remote Cloudflare Worker
+    const workerRes = await fetch('https://api.smartfoodasystent.workers.dev/api', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-access-token': String(req.headers['x-access-token'] || ''),
+      },
+      body: JSON.stringify(requestData),
+    });
+
+    const data = await workerRes.json().catch(() => ({}));
+    res.status(workerRes.status).json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Proxy error' });
+  }
+});
+
 async function startServer() {
   const httpServer = http.createServer(app);
 

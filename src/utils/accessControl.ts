@@ -314,14 +314,43 @@ export async function callCloudflareWorkerAI(payload: {
     ...(payload.extraPayload || {}),
   };
 
-  const response = await fetch(CLOUDFLARE_WORKER_URL, {
+  const requestInit: RequestInit = {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-access-token': savedAccessKey || '',
     },
     body: JSON.stringify(requestBody),
-  });
+  };
+
+  // Build candidate endpoints: relative /api on the same domain first, then full Worker URLs as fallback
+  const candidateUrls: string[] = ['/api', CLOUDFLARE_WORKER_URL, 'https://api.smartfoodasystent.workers.dev/'];
+  const uniqueUrls = Array.from(new Set(candidateUrls));
+
+  let response: Response | null = null;
+  let lastNetworkError: any = null;
+
+  for (let i = 0; i < uniqueUrls.length; i++) {
+    const endpoint = uniqueUrls[i];
+    try {
+      const res = await fetch(endpoint, requestInit);
+      // If static server returned 404 or 405 Method Not Allowed on this endpoint, try the next fallback endpoint
+      if ((res.status === 404 || res.status === 405) && i < uniqueUrls.length - 1) {
+        continue;
+      }
+      response = res;
+      break;
+    } catch (netErr) {
+      lastNetworkError = netErr;
+      if (i === uniqueUrls.length - 1) {
+        throw netErr;
+      }
+    }
+  }
+
+  if (!response) {
+    throw lastNetworkError || new Error('Не удалось связаться с сервером ИИ');
+  }
 
   if (response.status === 401 || response.status === 402 || response.status === 403 || response.status === 429) {
     payload.onOpenPaywall?.();
