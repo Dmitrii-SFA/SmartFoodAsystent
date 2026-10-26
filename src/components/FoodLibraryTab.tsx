@@ -92,8 +92,9 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
     name: '',
   });
 
-  // Add Product Modal state
+  // Add / Edit Product Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [creationMode, setCreationMode] = useState<'manual' | 'ai_name' | 'photo_label' | 'photo_dish'>('ai_name');
 
   // Form Fields
@@ -217,12 +218,35 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
   };
 
   const handleOpenAddModal = (mode: 'manual' | 'ai_name' | 'photo_label' | 'photo_dish') => {
+    setEditingProductId(null);
     setCreationMode(mode);
     setFormName('');
     setFormServingGrams(100);
     setFormServingGramsStr('100');
     setFormNutrients({});
     setCustomAddedMetricIds([]);
+    setIsSecondaryNutrientsExpanded(false);
+    setIsAddNutrientMenuOpen(false);
+    setIsCreatingNutrientMode(false);
+    setNewNutrientError(null);
+    setImagePreview(null);
+    setAnalysisNote(null);
+    setValidationError(null);
+    setIsAddModalOpen(true);
+  };
+
+  const handleOpenEditProductModal = (item: LibraryFoodItem) => {
+    setEditingProductId(item.id);
+    setCreationMode('manual');
+    setFormName(item.name || '');
+    const grams = item.servingSizeGrams || 100;
+    setFormServingGrams(grams);
+    setFormServingGramsStr(String(grams));
+    setFormNutrients({ ...(item.nutrients || {}) });
+    const existingExtraIds = Object.keys(item.nutrients || {}).filter(
+      (id) => !CORE_METRIC_IDS.includes(id) && id !== 'water'
+    );
+    setCustomAddedMetricIds(existingExtraIds);
     setIsSecondaryNutrientsExpanded(false);
     setIsAddNutrientMenuOpen(false);
     setIsCreatingNutrientMode(false);
@@ -320,20 +344,26 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
   const handleSaveProduct = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) {
-      setValidationError('Нельзя создать продукт без указания названия!');
+      setValidationError('Нельзя сохранить продукт без указания названия!');
       return;
     }
 
-    const newItem: LibraryFoodItem = {
-      id: `lib-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    const existingItem = editingProductId
+      ? library.find((item) => item.id === editingProductId)
+      : undefined;
+
+    const savedItem: LibraryFoodItem = {
+      ...(existingItem || {}),
+      id: existingItem ? existingItem.id : `lib-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       name: formName.trim(),
       servingSizeGrams: Number(formServingGramsStr) || formServingGrams || 100,
       nutrients: formNutrients,
-      createdAt: Date.now(),
-      source: creationMode,
+      createdAt: existingItem ? existingItem.createdAt : Date.now(),
+      source: editingProductId ? 'manual' : creationMode,
     };
 
-    onSaveToLibrary(newItem);
+    onSaveToLibrary(savedItem);
+    setEditingProductId(null);
     setIsAddModalOpen(false);
   };
 
@@ -486,6 +516,15 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditProductModal(item)}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-cyan-400 hover:bg-cyan-950/30 transition active:scale-95 shrink-0"
+                    title="Изменить"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+
                   {onAddToShoppingList && (
                     <button
                       type="button"
@@ -673,20 +712,30 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
-                  <Apple className="w-5 h-5" />
+                  {editingProductId ? <Edit3 className="w-5 h-5" /> : <Apple className="w-5 h-5" />}
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">Добавить продукт в библиотеку</h3>
+                  <h3 className="text-sm font-bold text-white">
+                    {editingProductId ? 'Изменить продукт' : 'Добавить продукт в библиотеку'}
+                  </h3>
                   <p className="text-[11px] text-slate-400">
-                    {creationMode === 'ai_name' && 'Расчет всех нутриентов через ИИ по названию'}
-                    {creationMode === 'photo_label' && 'Распознавание КБЖУ с фото этикетки + витамины по названию'}
-                    {creationMode === 'photo_dish' && 'Примерная визуальная оценка готового блюда по фото'}
-                    {creationMode === 'manual' && 'Ручной ввод всех значений'}
+                    {editingProductId
+                      ? 'Ручное изменение названия и нутриентов продукта'
+                      : creationMode === 'ai_name'
+                      ? 'Расчет всех нутриентов через ИИ по названию'
+                      : creationMode === 'photo_label'
+                      ? 'Распознавание КБЖУ с фото этикетки + витамины по названию'
+                      : creationMode === 'photo_dish'
+                      ? 'Примерная визуальная оценка готового блюда по фото'
+                      : 'Ручной ввод всех значений'}
                   </p>
                 </div>
               </div>
               <button
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={() => {
+                  setEditingProductId(null);
+                  setIsAddModalOpen(false);
+                }}
                 className="p-1 rounded-lg text-slate-400 hover:text-white"
               >
                 <X className="w-4 h-4" />
@@ -1164,7 +1213,10 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
               <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsAddModalOpen(false)}
+                  onClick={() => {
+                    setEditingProductId(null);
+                    setIsAddModalOpen(false);
+                  }}
                   className="min-h-[40px] px-3.5 py-2 text-xs rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800"
                 >
                   {t.cancel}
@@ -1174,7 +1226,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                   className="min-h-[40px] px-4 py-2 text-xs font-bold rounded-xl text-white shadow-md transition active:scale-95"
                   style={{ backgroundColor: accentColor }}
                 >
-                  {t.saveToLibraryBtn}
+                  {editingProductId ? 'Сохранить изменения' : t.saveToLibraryBtn}
                 </button>
               </div>
             </form>

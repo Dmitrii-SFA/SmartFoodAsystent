@@ -178,6 +178,8 @@ export interface LocalizationConfig {
   labels: LocalizationLabels;
 }
 
+export type NutritionGoalMode = 'lose' | 'maintain' | 'gain';
+
 export interface UserConfig {
   version: number;
   userName: string;
@@ -188,6 +190,7 @@ export interface UserConfig {
   mealCategories: MealCategoryConfig[];
   sections: SectionVisibilityConfig;
   soundSettings?: SoundSettingsConfig;
+  goalMode?: NutritionGoalMode;
 }
 
 export interface LoggedFoodItem {
@@ -215,6 +218,7 @@ export interface PersonProfile {
   logs: Record<string, DayLog>;
   metrics: MetricConfig[];
   mealCategories: MealCategoryConfig[];
+  goalMode?: NutritionGoalMode;
 }
 
 

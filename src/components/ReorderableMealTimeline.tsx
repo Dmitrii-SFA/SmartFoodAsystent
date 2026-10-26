@@ -25,6 +25,7 @@ import {
   Bell,
   BellOff,
   Pill,
+  Edit3,
 } from 'lucide-react';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 
@@ -45,6 +46,7 @@ interface ReorderableMealTimelineProps {
   onAddCategory: (newCategory: MealCategoryConfig) => void;
   onDeleteCategory?: (categoryId: string) => void;
   onOpenAddFoodModal: (categoryId: string) => void;
+  onUpdateItemWeight?: (itemId: string, newAmountGrams: number) => void;
   onDeleteItem: (itemId: string) => void;
   onAddToShoppingList?: (item: { name: string; quantity?: string; foodId?: string }) => void;
   onNavigateToMealSettings?: () => void;
@@ -67,6 +69,7 @@ export const ReorderableMealTimeline: React.FC<ReorderableMealTimelineProps> = (
   onAddCategory,
   onDeleteCategory,
   onOpenAddFoodModal,
+  onUpdateItemWeight,
   onDeleteItem,
   onAddToShoppingList,
 }) => {
@@ -76,6 +79,10 @@ export const ReorderableMealTimeline: React.FC<ReorderableMealTimelineProps> = (
 
   // Quick time & reminder editor per card
   const [editingTimeCatId, setEditingTimeCatId] = useState<string | null>(null);
+
+  // Edit logged food item weight modal state
+  const [editingFoodItem, setEditingFoodItem] = useState<FoodItem | null>(null);
+  const [editGramsStr, setEditGramsStr] = useState<string>('100');
 
   // Add Meal Modal State (time is empty by default as requested)
   const [showAddMealModal, setShowAddMealModal] = useState(false);
@@ -610,6 +617,25 @@ export const ReorderableMealTimeline: React.FC<ReorderableMealTimelineProps> = (
                           </div>
 
                           <div className="flex items-center gap-1 shrink-0">
+                            {onUpdateItemWeight && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingFoodItem(item);
+                                  setEditGramsStr(String(item.amountGrams || 100));
+                                }}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-cyan-950/30 transition"
+                                title={
+                                  isEn
+                                    ? 'Edit weight'
+                                    : isPl
+                                    ? 'Zmień wagę'
+                                    : 'Изменить'
+                                }
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                            )}
                             {onAddToShoppingList && (
                               <button
                                 type="button"
@@ -837,6 +863,136 @@ export const ReorderableMealTimeline: React.FC<ReorderableMealTimelineProps> = (
           {sharedCopied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
         </button>
       </div>
+
+      {/* Edit Logged Food Weight Modal */}
+      {editingFoodItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const parsed = Math.max(1, Math.round(Number(editGramsStr) || editingFoodItem.amountGrams || 100));
+              onUpdateItemWeight?.(editingFoodItem.id, parsed);
+              setEditingFoodItem(null);
+            }}
+            className="w-full max-w-sm border border-slate-700 bg-slate-900 rounded-2xl shadow-2xl p-5 space-y-4 text-xs"
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="min-w-0 pr-2">
+                <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                  <Edit3 className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span>
+                    {isEn
+                      ? 'Edit Portion Weight'
+                      : isPl
+                      ? 'Zmień wagę porcji'
+                      : 'Изменить вес продукта'}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-400 font-semibold truncate mt-0.5">
+                  {editingFoodItem.name}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingFoodItem(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-slate-300 font-medium mb-1">
+                  {t.portionWeightGramsLabel}
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="any"
+                  autoFocus
+                  value={editGramsStr}
+                  onChange={(e) => setEditGramsStr(e.target.value)}
+                  className="w-full min-h-[42px] px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white font-mono text-sm font-bold focus:outline-hidden focus:border-cyan-500"
+                />
+              </div>
+
+              {/* Quick gram presets */}
+              <div className="flex flex-wrap gap-1.5">
+                {[50, 100, 150, 200, 250, 300].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setEditGramsStr(String(preset))}
+                    className={`px-2.5 py-1 rounded-lg border font-mono text-[11px] transition ${
+                      Number(editGramsStr) === preset
+                        ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold'
+                        : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    {preset} {t.gramsShort}
+                  </button>
+                ))}
+              </div>
+
+              {/* Live recalculated macros preview */}
+              {(() => {
+                const oldG = Math.max(1, editingFoodItem.amountGrams || 100);
+                const newG = Math.max(1, Number(editGramsStr) || oldG);
+                const ratio = newG / oldG;
+                const previewCal = Math.round((editingFoodItem.nutrients['calories'] || 0) * ratio);
+                const previewProt = Math.round((editingFoodItem.nutrients['proteins'] || 0) * ratio * 10) / 10;
+                const previewFat = Math.round((editingFoodItem.nutrients['fats'] || 0) * ratio * 10) / 10;
+                const previewCarb = Math.round((editingFoodItem.nutrients['carbs'] || 0) * ratio * 10) / 10;
+
+                return (
+                  <div className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/80 font-mono text-center space-y-1">
+                    <div>
+                      <span className="text-slate-400">{t.totalCaloriesPreview} </span>
+                      <span
+                        className="font-bold"
+                        style={{ color: getNutrientColor('calories', metrics, '#f97316') }}
+                      >
+                        {previewCal} {t.kcalShort}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-300 flex items-center justify-center gap-2">
+                      <span style={{ color: getNutrientColor('proteins', metrics, '#3b82f6') }}>
+                        {t.protShort}: {previewProt}{t.gramsShort}
+                      </span>
+                      <span>•</span>
+                      <span style={{ color: getNutrientColor('fats', metrics, '#eab308') }}>
+                        {t.fatShort}: {previewFat}{t.gramsShort}
+                      </span>
+                      <span>•</span>
+                      <span style={{ color: getNutrientColor('carbs', metrics, '#ef4444') }}>
+                        {t.carbShort}: {previewCarb}{t.gramsShort}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingFoodItem(null)}
+                className="min-h-[40px] px-3.5 py-2 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800"
+              >
+                {t.cancel}
+              </button>
+              <button
+                type="submit"
+                className="min-h-[40px] px-4 py-2 font-bold rounded-xl text-white shadow-md transition active:scale-95"
+                style={{ backgroundColor: accentColor }}
+              >
+                {isEn ? 'Save' : isPl ? 'Zapisz' : 'Сохранить'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       <DeleteConfirmModal

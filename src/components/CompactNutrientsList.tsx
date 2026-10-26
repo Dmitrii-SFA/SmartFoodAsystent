@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MetricConfig, FoodItem, LocalizationLabels } from '../types/config';
+import { MetricConfig, FoodItem, LocalizationLabels, NutritionGoalMode } from '../types/config';
 import { ThemeStyles, getBorderRadiusClass } from '../utils/themeHelper';
 import { getUITranslations } from '../utils/translations';
 import {
@@ -19,6 +19,7 @@ interface CompactNutrientsListProps {
   consumedTotals?: Record<string, number>;
   todayItems?: FoodItem[];
   waterMl?: number;
+  goalMode?: NutritionGoalMode;
   themeStyles: ThemeStyles;
   accentColor: string;
   borderRadius: string;
@@ -41,6 +42,7 @@ export const CompactNutrientsList: React.FC<CompactNutrientsListProps> = ({
   consumedTotals,
   todayItems = [],
   waterMl = 0,
+  goalMode = 'maintain',
   themeStyles,
   accentColor,
   borderRadius,
@@ -129,6 +131,43 @@ export const CompactNutrientsList: React.FC<CompactNutrientsListProps> = ({
     const remaining = Math.max(0, Math.round((targetVal - currentVal) * 10) / 10);
     const overAmount = Math.max(0, Math.round((currentVal - targetVal) * 10) / 10);
 
+    // Goal-based highlighting for ONLY the consumed amount number and percentage badge:
+    // - 'lose' (Похудение): exceeded (> targetVal) -> red; not reached / within norm (<= targetVal) -> green
+    // - 'maintain' (Баланс): no red/green highlighting, keep nutrient's own color
+    // - 'gain' (Набор): not reached (< targetVal) -> red; reached (>= targetVal) -> green
+    let highlightState: 'red' | 'green' | 'neutral' = 'neutral';
+    if (goalMode === 'lose') {
+      highlightState = currentVal > targetVal ? 'red' : 'green';
+    } else if (goalMode === 'gain') {
+      highlightState = currentVal < targetVal ? 'red' : 'green';
+    }
+
+    const valueNumberColor =
+      highlightState === 'red'
+        ? '#f87171'
+        : highlightState === 'green'
+        ? '#34d399'
+        : metric.color;
+
+    const percentageBadgeStyle: React.CSSProperties =
+      highlightState === 'red'
+        ? {
+            backgroundColor: 'rgba(239, 68, 68, 0.16)',
+            color: '#fca5a5',
+            borderColor: 'rgba(239, 68, 68, 0.4)',
+          }
+        : highlightState === 'green'
+        ? {
+            backgroundColor: 'rgba(16, 185, 129, 0.16)',
+            color: '#6ee7b7',
+            borderColor: 'rgba(16, 185, 129, 0.4)',
+          }
+        : {
+            backgroundColor: 'rgba(30, 41, 59, 0.8)',
+            color: metric.color,
+            borderColor: `${metric.color}40`,
+          };
+
     return (
       <div
         key={metric.id}
@@ -197,7 +236,7 @@ export const CompactNutrientsList: React.FC<CompactNutrientsListProps> = ({
           <div className="flex items-center gap-2 shrink-0 font-mono text-xs tabular-nums">
             <span
               className="hidden sm:inline text-[10px]"
-              style={{ color: isOver ? '#f87171' : `${metric.color}cc` }}
+              style={{ color: `${metric.color}cc` }}
             >
               {isOver
                 ? `${t.exceededBy} +${overAmount} ${metric.unit}`
@@ -206,7 +245,7 @@ export const CompactNutrientsList: React.FC<CompactNutrientsListProps> = ({
             <div>
               <span
                 className="font-bold transition-colors"
-                style={{ color: isOver ? '#f87171' : metric.color }}
+                style={{ color: valueNumberColor }}
               >
                 {currentVal}
               </span>
@@ -217,25 +256,7 @@ export const CompactNutrientsList: React.FC<CompactNutrientsListProps> = ({
             </div>
             <span
               className="text-[10px] font-bold px-1.5 py-0.5 rounded-md min-w-[40px] text-center border transition-colors"
-              style={
-                isOver
-                  ? {
-                      backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                      color: '#fca5a5',
-                      borderColor: 'rgba(239, 68, 68, 0.35)',
-                    }
-                  : rawPercentage >= 90
-                  ? {
-                      backgroundColor: `${metric.color}25`,
-                      color: metric.color,
-                      borderColor: `${metric.color}50`,
-                    }
-                  : {
-                      backgroundColor: 'rgba(30, 41, 59, 0.8)',
-                      color: metric.color,
-                      borderColor: `${metric.color}35`,
-                    }
-              }
+              style={percentageBadgeStyle}
             >
               {rawPercentage}%
             </span>
@@ -248,7 +269,7 @@ export const CompactNutrientsList: React.FC<CompactNutrientsListProps> = ({
             className="h-full rounded-full transition-all duration-300"
             style={{
               width: `${barPercentage}%`,
-              backgroundColor: isOver && metric.id === 'calories' ? '#ef4444' : metric.color,
+              backgroundColor: metric.color,
             }}
           />
         </div>
@@ -272,7 +293,7 @@ export const CompactNutrientsList: React.FC<CompactNutrientsListProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {overTargetMetrics.length > 0 ? (
+          {goalMode !== 'maintain' && overTargetMetrics.length > 0 ? (
             <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/25 px-2 py-0.5 rounded-lg">
               <AlertTriangle className="w-3 h-3 shrink-0" />
               <span>

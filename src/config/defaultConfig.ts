@@ -3209,6 +3209,7 @@ export function ensureProtectedTheme(theme: any): any {
 export function ensureEntireConfigProtected(userConfig: UserConfig): UserConfig {
   const safeConfig: UserConfig = {
     ...userConfig,
+    goalMode: userConfig.goalMode || 'maintain',
     installedLanguages: ensureProtectedLanguages(userConfig.installedLanguages),
     metrics: ensureProtectedMetrics(userConfig.metrics),
     mealCategories: ensureProtectedMealCategories(userConfig.mealCategories),
@@ -3220,6 +3221,7 @@ export function ensureEntireConfigProtected(userConfig: UserConfig): UserConfig 
 export const DEFAULT_USER_CONFIG: UserConfig = {
   version: 1,
   userName: 'Дмитрий',
+  goalMode: 'maintain',
   language: {
     code: 'ru',
     labels: DEFAULT_RUSSIAN_LABELS,

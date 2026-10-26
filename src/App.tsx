@@ -184,6 +184,7 @@ export default function App() {
         logs,
         metrics: config.metrics,
         mealCategories: config.mealCategories,
+        goalMode: config.goalMode || 'maintain',
       },
     ];
   });
@@ -217,6 +218,7 @@ export default function App() {
         );
         return {
           ...prev,
+          goalMode: activeProfile.goalMode || prev.goalMode || 'maintain',
           metrics: ensureProtectedMetrics(translated.metrics),
           mealCategories: ensureProtectedMealCategories(translated.mealCategories),
         };
@@ -225,7 +227,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keep active person's profile in sync with logs, config.metrics, and config.mealCategories
+  // Keep active person's profile in sync with logs, config.metrics, config.mealCategories, and config.goalMode
   useEffect(() => {
     setPeople((prev) =>
       prev.map((p) =>
@@ -235,11 +237,12 @@ export default function App() {
               logs,
               metrics: config.metrics,
               mealCategories: config.mealCategories,
+              goalMode: config.goalMode || 'maintain',
             }
           : p
       )
     );
-  }, [logs, config.metrics, config.mealCategories, activePersonId]);
+  }, [logs, config.metrics, config.mealCategories, config.goalMode, activePersonId]);
 
   // Persist people profiles and activePersonId to localStorage
   useEffect(() => {
@@ -279,6 +282,7 @@ export default function App() {
     setLogs(target.logs || {});
     setConfig((prev) => ({
       ...prev,
+      goalMode: target.goalMode || 'maintain',
       metrics: nextMetrics,
       mealCategories: nextMealCategories,
     }));
@@ -303,6 +307,7 @@ export default function App() {
       logs: freshLogs,
       metrics: freshMetrics,
       mealCategories: freshMealCategories,
+      goalMode: 'maintain',
     };
 
     setPeople((prev) => [...prev, newPerson]);
@@ -310,6 +315,7 @@ export default function App() {
     setLogs(freshLogs);
     setConfig((prev) => ({
       ...prev,
+      goalMode: 'maintain',
       metrics: freshMetrics,
       mealCategories: freshMealCategories,
     }));
@@ -344,6 +350,7 @@ export default function App() {
       setLogs(nextPerson.logs || {});
       setConfig((prev) => ({
         ...prev,
+        goalMode: nextPerson.goalMode || 'maintain',
         metrics: ensureProtectedMetrics(translated.metrics),
         mealCategories: ensureProtectedMealCategories(translated.mealCategories),
       }));
@@ -361,6 +368,13 @@ export default function App() {
   // Active Screen Tab (diary, library, recipes, settings)
   const [activeTab, setActiveTab] = useState<AppTab>('diary');
   const [settingsFocusSection, setSettingsFocusSection] = useState<string | null>(null);
+
+  // Scroll to the top of the page when opening Daily Menu or Food Library
+  useEffect(() => {
+    if (activeTab === 'diary' || activeTab === 'library') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
+  }, [activeTab]);
 
   // Food Library state (Water in 3 languages + English default products for the 2 default recipes)
   const STORAGE_KEY_LIBRARY = 'pwa_calorie_food_library_v2';
@@ -1178,6 +1192,40 @@ export default function App() {
     }
   };
 
+  // Update food item weight in daily log and proportionally recalculate its nutrients
+  const handleUpdateItemWeight = (itemId: string, newAmountGrams: number) => {
+    const safeGrams = Math.max(1, Math.round(Number(newAmountGrams) || 100));
+    setLogs((prev) => {
+      const day = prev[currentDateStr];
+      if (!day) return prev;
+      return {
+        ...prev,
+        [currentDateStr]: {
+          ...day,
+          items: day.items.map((item) => {
+            if (item.id !== itemId) return item;
+            const oldGrams = Math.max(1, item.amountGrams || 100);
+            const ratio = safeGrams / oldGrams;
+            const recalculatedNutrients: Record<string, number> = {};
+            Object.entries(item.nutrients || {}).forEach(([k, val]) => {
+              recalculatedNutrients[k] = Math.round((Number(val) || 0) * ratio * 10) / 10;
+            });
+            return {
+              ...item,
+              amountGrams: safeGrams,
+              nutrients: recalculatedNutrients,
+            };
+          }),
+        },
+      };
+    });
+    setConfigToast({
+      message: `Вес порции изменён: ${safeGrams} г`,
+      visible: true,
+    });
+    setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 2500);
+  };
+
   // Delete food item
   const handleDeleteItem = (itemId: string) => {
     setLogs((prev) => {
@@ -1258,11 +1306,12 @@ export default function App() {
     }, 4000);
   };
 
-  // Clicking "Добавить блюдо" in the Daily Menu opens the Food Library tab with the meal category preselected
+  // Clicking "Добавить блюдо" in the Daily Menu opens the Food Library tab at the very top with the meal category preselected
   const handleOpenAddFoodModal = (categoryId?: string) => {
     const targetCatId = categoryId || config.mealCategories[0]?.id || 'breakfast';
     setPreselectedMealCategoryId(targetCatId);
     setActiveTab('library');
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   };
 
   // Active categories for the current selected day:
@@ -1696,6 +1745,7 @@ export default function App() {
                 consumedTotals={consumedTotals}
                 todayItems={currentDayLog.items}
                 waterMl={currentDayLog.waterMl || 0}
+                goalMode={config.goalMode || 'maintain'}
                 onAddWater={handleAddWater}
                 onResetWater={() => handleAddWater(-(currentDayLog.waterMl || 0))}
                 themeStyles={themeStyles}
@@ -1770,6 +1820,7 @@ export default function App() {
               onAddCategory={handleAddDayCategory}
               onDeleteCategory={handleDeleteMealCategory}
               onOpenAddFoodModal={handleOpenAddFoodModal}
+              onUpdateItemWeight={handleUpdateItemWeight}
               onDeleteItem={handleDeleteItem}
               onAddToShoppingList={handleAddToShoppingList}
               onNavigateToMealSettings={() => {
@@ -1820,14 +1871,20 @@ export default function App() {
                     }
                   }
                 }
+                const isExistingById = library.some((item) => item.id === cleanItem.id);
                 setLibrary((prev) => {
+                  if (prev.some((item) => item.id === cleanItem.id)) {
+                    return prev.map((item) => (item.id === cleanItem.id ? cleanItem : item));
+                  }
                   const filtered = prev.filter(
                     (item) => (item.name || '').trim().toLowerCase() !== lowerName
                   );
                   return [cleanItem, ...filtered];
                 });
                 setConfigToast({
-                  message: `Продукт «${cleanItem.name}» добавлен в библиотеку!`,
+                  message: isExistingById
+                    ? `Продукт «${cleanItem.name}» обновлён в списке продуктов!`
+                    : `Продукт «${cleanItem.name}» добавлен в библиотеку!`,
                   visible: true,
                 });
                 setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 3000);
@@ -2059,6 +2116,20 @@ export default function App() {
                   { ...config, metrics: newMetrics },
                   'Дневная норма калорий и БЖУ успешно обновлена!'
                 );
+              }}
+              onUpdateGoalMode={(mode) => {
+                setPreviousConfig({ ...config });
+                setConfig((prev) => ({
+                  ...prev,
+                  goalMode: mode,
+                }));
+                const modeLabel =
+                  mode === 'lose' ? 'Похудение' : mode === 'gain' ? 'Набор' : 'Баланс';
+                setConfigToast({
+                  message: `Режим цели переключен: ${modeLabel}`,
+                  visible: true,
+                });
+                setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 2500);
               }}
               onUpdateMealCategories={(newCats) => {
                 handleApplyConfig(

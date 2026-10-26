@@ -46,6 +46,21 @@ export const HeroSummary: React.FC<HeroSummaryProps> = ({
   const caloriePercent = Math.min(100, Math.round((calorieConsumed / Math.max(1, calorieTarget)) * 100));
   const isCalorieExceeded = calorieConsumed > calorieTarget;
 
+  const goalMode = config.goalMode || 'maintain';
+
+  const getHighlightState = (current: number, target: number): 'red' | 'green' | 'neutral' => {
+    if (goalMode === 'lose') {
+      return current > target ? 'red' : 'green';
+    }
+    if (goalMode === 'gain') {
+      return current < target ? 'red' : 'green';
+    }
+    return 'neutral';
+  };
+
+  const calorieHighlight = getHighlightState(calorieConsumed, calorieTarget);
+  const calorieBaseColor = calorieMetric?.color || config.theme.accentColor;
+
   // SVG Gauge calculations
   const radius = 68;
   const circumference = 2 * Math.PI * radius;
@@ -79,7 +94,7 @@ export const HeroSummary: React.FC<HeroSummaryProps> = ({
                 cx="80"
                 cy="80"
                 r={radius}
-                stroke={isCalorieExceeded ? '#ef4444' : calorieMetric?.color || config.theme.accentColor}
+                stroke={calorieBaseColor}
                 strokeWidth="12"
                 strokeDasharray={circumference}
                 strokeDashoffset={strokeDashoffset}
@@ -96,7 +111,17 @@ export const HeroSummary: React.FC<HeroSummaryProps> = ({
                 className="w-5 h-5 mb-0.5"
                 style={{ color: calorieMetric?.color || '#f59e0b' }}
               />
-              <span className={`text-2xl font-black tracking-tight ${themeStyles.textPrimary}`}>
+              <span
+                className="text-2xl font-black tracking-tight transition-colors"
+                style={{
+                  color:
+                    calorieHighlight === 'red'
+                      ? '#f87171'
+                      : calorieHighlight === 'green'
+                      ? '#34d399'
+                      : undefined,
+                }}
+              >
                 {calorieConsumed}
               </span>
               <span className={`text-[10px] font-semibold uppercase tracking-wider ${themeStyles.textMuted}`}>
@@ -104,9 +129,11 @@ export const HeroSummary: React.FC<HeroSummaryProps> = ({
               </span>
               <span
                 className={`mt-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                  isCalorieExceeded
+                  calorieHighlight === 'red'
                     ? 'bg-red-500/20 text-red-400'
-                    : 'bg-emerald-500/20 text-emerald-400'
+                    : calorieHighlight === 'green'
+                    ? 'bg-emerald-500/20 text-emerald-400'
+                    : 'bg-slate-800 text-slate-300'
                 }`}
               >
                 {caloriePercent}%
@@ -135,7 +162,7 @@ export const HeroSummary: React.FC<HeroSummaryProps> = ({
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className={`p-2.5 rounded-xl border ${themeStyles.borderColor} bg-slate-800/40`}>
                 <div className={`text-[10px] ${themeStyles.textMuted}`}>{labels.remaining}</div>
-                <div className={`text-sm font-bold ${isCalorieExceeded ? 'text-red-400' : 'text-emerald-400'}`}>
+                <div className={`text-sm font-bold ${themeStyles.textPrimary}`}>
                   {isCalorieExceeded ? `+${calorieConsumed - calorieTarget}` : calorieRemaining} {calorieMetric?.unit}
                 </div>
               </div>
@@ -164,8 +191,9 @@ export const HeroSummary: React.FC<HeroSummaryProps> = ({
           {summaryMetrics.map((metric: MetricConfig) => {
             const consumed = Math.round(consumedTotals[metric.id] || 0);
             const target = metric.target;
-            const percent = Math.min(100, Math.round((consumed / Math.max(1, target)) * 100));
-            const isExceeded = consumed > target;
+            const rawPercent = Math.round((consumed / Math.max(1, target)) * 100);
+            const percent = Math.min(100, rawPercent);
+            const mHighlight = getHighlightState(consumed, target);
 
             return (
               <div
@@ -189,15 +217,42 @@ export const HeroSummary: React.FC<HeroSummaryProps> = ({
                       {metric.label}
                     </span>
                   </div>
-                  <span className="text-[10px] font-mono text-slate-400 shrink-0">
-                    {percent}%
+                  <span
+                    className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0"
+                    style={
+                      mHighlight === 'red'
+                        ? {
+                            backgroundColor: 'rgba(239, 68, 68, 0.16)',
+                            color: '#fca5a5',
+                          }
+                        : mHighlight === 'green'
+                        ? {
+                            backgroundColor: 'rgba(16, 185, 129, 0.16)',
+                            color: '#6ee7b7',
+                          }
+                        : {
+                            color: metric.color,
+                          }
+                    }
+                  >
+                    {rawPercent}%
                   </span>
                 </div>
 
                 {/* Values */}
                 <div className="my-1">
                   <div className="flex items-baseline gap-1">
-                    <span className="text-base font-bold text-white tracking-tight">
+                    <span
+                      className="text-base font-bold tracking-tight"
+                      style={{
+                        color:
+                          mHighlight === 'red'
+                            ? '#f87171'
+                            : mHighlight === 'green'
+                            ? '#34d399'
+                            : metric.color,
+                      }}
+                    >
                       {consumed}
                     </span>
                     <span className="text-[10px] text-slate-400">
@@ -212,7 +267,7 @@ export const HeroSummary: React.FC<HeroSummaryProps> = ({
                     className="h-full rounded-full transition-all duration-500"
                     style={{
                       width: `${percent}%`,
-                      backgroundColor: isExceeded ? '#ef4444' : metric.color,
+                      backgroundColor: metric.color,
                     }}
                   />
                 </div>

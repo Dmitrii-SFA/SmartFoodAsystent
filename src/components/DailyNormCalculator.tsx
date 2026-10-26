@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MetricConfig, LocalizationLabels } from '../types/config';
+import { MetricConfig, LocalizationLabels, NutritionGoalMode } from '../types/config';
 import { ThemeStyles, getBorderRadiusClass } from '../utils/themeHelper';
 import {
   Calculator,
@@ -28,6 +28,8 @@ interface DailyNormCalculatorProps {
   labels?: Partial<LocalizationLabels>;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  goalMode?: NutritionGoalMode;
+  onUpdateGoalMode?: (mode: NutritionGoalMode) => void;
   onUpdateMetrics?: (updatedMetrics: MetricConfig[]) => void;
   onApplyNorm?: (calories: number, proteins: number, fats: number, carbs: number) => void;
   onApplyCalculatedTargets?: (updatedMetrics: MetricConfig[], summaryText: string) => void;
@@ -36,7 +38,7 @@ interface DailyNormCalculatorProps {
 
 type Gender = 'male' | 'female';
 type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active' | 'custom';
-type GoalType = 'lose' | 'maintain' | 'gain';
+type GoalType = NutritionGoalMode;
 
 const CORE_PRIMARY_IDS = ['calories', 'proteins', 'fats', 'carbs', 'water'];
 
@@ -48,6 +50,8 @@ export const DailyNormCalculator: React.FC<DailyNormCalculatorProps> = ({
   langCode = 'ru',
   isCollapsed = false,
   onToggleCollapse,
+  goalMode = 'maintain',
+  onUpdateGoalMode,
   onUpdateMetrics,
   onApplyNorm,
   onApplyCalculatedTargets,
@@ -96,7 +100,18 @@ export const DailyNormCalculator: React.FC<DailyNormCalculatorProps> = ({
   const [height, setHeight] = useState<string>('178');
   const [activity, setActivity] = useState<ActivityLevel>('moderate');
   const [customActivity, setCustomActivity] = useState<string>('');
-  const [goal, setGoal] = useState<GoalType>('maintain');
+  const [goal, setGoal] = useState<GoalType>(goalMode || 'maintain');
+
+  useEffect(() => {
+    if (goalMode) {
+      setGoal(goalMode);
+    }
+  }, [goalMode]);
+
+  const handleSelectGoalMode = (nextGoal: GoalType) => {
+    setGoal(nextGoal);
+    onUpdateGoalMode?.(nextGoal);
+  };
 
   const [isAiCalculating, setIsAiCalculating] = useState<boolean>(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -438,6 +453,10 @@ export const DailyNormCalculator: React.FC<DailyNormCalculatorProps> = ({
               >
                 {currentCalorieTarget} {isEn || isPl ? 'kcal' : 'ккал'}
               </span>
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono px-2.5 py-0.5 rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-semibold">
+                <Target className="w-3 h-3 shrink-0" />
+                {GOAL_MODIFIERS[goal].shortLabel}
+              </span>
               <span className="inline-flex items-center text-[11px] font-mono tabular-nums px-2.5 py-0.5 rounded-lg bg-slate-800/90 border border-slate-700 text-slate-300">
                 {isEn
                   ? `Tracked nutrients: ${trackedMetrics.length}`
@@ -461,6 +480,61 @@ export const DailyNormCalculator: React.FC<DailyNormCalculatorProps> = ({
 
       {!isCollapsed && (
         <div className="space-y-4 pt-3.5 border-t border-slate-800/80 animate-in fade-in duration-150">
+          {/* Goal Mode Selector directly in Daily Norm (Похудение, Баланс, Набор) */}
+          <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800/90 space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>
+                  {isEn
+                    ? 'Goal & Daily Menu Highlighting'
+                    : isPl
+                    ? 'Cel i podświetlanie w dziennym menu'
+                    : 'Цель и подсветка в Дневном меню'}
+                </span>
+              </label>
+              <span className="text-[11px] text-slate-400">
+                {goal === 'lose'
+                  ? isEn
+                    ? 'Within norm — green, exceeded — red'
+                    : isPl
+                    ? 'W normie — zielony, przekroczenie — czerwony'
+                    : 'Не добрал — зелёный, превысил — красный'
+                  : goal === 'gain'
+                  ? isEn
+                    ? 'Below norm — red, reached — green'
+                    : isPl
+                    ? 'Poniżej normy — czerwony, osiągnięto — zielony'
+                    : 'Не добрал — красный, набрал норму — зелёный'
+                  : isEn
+                  ? 'No red/green highlighting'
+                  : isPl
+                  ? 'Bez podświetlania na czerwono/zielono'
+                  : 'Без красной и зелёной подсветки'}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {(Object.keys(GOAL_MODIFIERS) as GoalType[]).map((gKey) => {
+                const isSelected = goal === gKey;
+                return (
+                  <button
+                    key={gKey}
+                    type="button"
+                    onClick={() => handleSelectGoalMode(gKey)}
+                    className={`min-h-[40px] py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 ${
+                      isSelected
+                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 shadow-sm ring-1 ring-emerald-500/40'
+                        : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                    }`}
+                  >
+                    <span>{GOAL_MODIFIERS[gKey].shortLabel}</span>
+                    {isSelected && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Primary Manual Input Section */}
           <div className="space-y-3">
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs">
@@ -734,7 +808,7 @@ export const DailyNormCalculator: React.FC<DailyNormCalculatorProps> = ({
                       <button
                         key={gKey}
                         type="button"
-                        onClick={() => setGoal(gKey)}
+                        onClick={() => handleSelectGoalMode(gKey)}
                         className={`min-h-[40px] py-2 px-2 rounded-xl border text-[11px] font-semibold transition ${
                           goal === gKey
                             ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'

@@ -9,6 +9,7 @@ import {
   RecipeItem,
   LibraryFoodItem,
   DayLog,
+  NutritionGoalMode,
 } from '../types/config';
 import { ThemeStyles, getBorderRadiusClass } from '../utils/themeHelper';
 import { getUITranslations } from '../utils/translations';
@@ -80,6 +81,7 @@ interface SettingsTabProps {
   onOpenResetModal: () => void;
   onOpenConfigModal: () => void;
   onUpdateMetrics: (metrics: MetricConfig[]) => void;
+  onUpdateGoalMode?: (mode: NutritionGoalMode) => void;
   onUpdateMealCategories: (categories: MealCategoryConfig[]) => void;
   focusSection?: string | null;
   onClearFocusSection?: () => void;
@@ -114,6 +116,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   onOpenResetModal,
   onOpenConfigModal,
   onUpdateMetrics,
+  onUpdateGoalMode,
   onUpdateMealCategories,
   focusSection,
   onClearFocusSection,
@@ -677,6 +680,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       <div className="relative z-10">
         <DailyNormCalculator
           metrics={config.metrics}
+          goalMode={config.goalMode || 'maintain'}
+          onUpdateGoalMode={onUpdateGoalMode}
           onUpdateMetrics={onUpdateMetrics}
           themeStyles={themeStyles}
           accentColor={config.theme.accentColor}
