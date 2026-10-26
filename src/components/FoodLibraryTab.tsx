@@ -331,7 +331,6 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
       nutrients: formNutrients,
       createdAt: Date.now(),
       source: creationMode,
-      photoUrl: imagePreview || undefined,
     };
 
     onSaveToLibrary(newItem);

@@ -475,44 +475,151 @@ export default function App() {
     ];
   };
 
+  // Helper to convert a logged food item (with arbitrary portion grams) into a 100g LibraryFoodItem
+  const createLibraryItemFromLoggedFood = (
+    item: { id?: string; name: string; amountGrams?: number; nutrients?: Record<string, number>; timestamp?: number }
+  ): LibraryFoodItem => {
+    const weight = Math.max(1, Number(item.amountGrams) || 100);
+    const nutrientsPer100g: Record<string, number> = {};
+    Object.entries(item.nutrients || {}).forEach(([k, val]) => {
+      const numVal = Number(val);
+      if (!isNaN(numVal) && numVal >= 0) {
+        nutrientsPer100g[k] = Math.round((numVal / weight) * 100 * 10) / 10;
+      }
+    });
+    return {
+      id: `lib-log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      name: item.name.trim(),
+      servingSizeGrams: 100,
+      nutrients: nutrientsPer100g,
+      createdAt: item.timestamp || Date.now(),
+      source: 'manual',
+    };
+  };
+
+  const STORAGE_KEY_DELETED_LIB_NAMES = 'pwa_calorie_deleted_library_names_v1';
+  const getDeletedLibraryNames = (): Set<string> => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_DELETED_LIB_NAMES);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return new Set(parsed.map((s) => String(s || '').trim().toLowerCase()).filter(Boolean));
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return new Set();
+  };
+
+  // Collect all unique products from day logs (both standalone logs and all people profiles)
+  const extractMissingLibraryItemsFromLogs = (
+    existingLibrary: LibraryFoodItem[],
+    dayLogsMap: Record<string, DayLog>,
+    peopleProfiles: PersonProfile[]
+  ): LibraryFoodItem[] => {
+    const deletedNames = getDeletedLibraryNames();
+    const knownNames = new Set(
+      existingLibrary.map((f) => (f.name || '').trim().toLowerCase()).filter(Boolean)
+    );
+    const recovered: LibraryFoodItem[] = [];
+
+    const processDayLogMap = (mapObj?: Record<string, DayLog>) => {
+      if (!mapObj || typeof mapObj !== 'object') return;
+      Object.values(mapObj).forEach((dayLog) => {
+        if (!dayLog || !Array.isArray(dayLog.items)) return;
+        dayLog.items.forEach((loggedItem) => {
+          const cleanName = (loggedItem?.name || '').trim();
+          if (!cleanName) return;
+          const lower = cleanName.toLowerCase();
+          if (knownNames.has(lower) || deletedNames.has(lower)) return;
+          knownNames.add(lower);
+          recovered.push(createLibraryItemFromLoggedFood(loggedItem));
+        });
+      });
+    };
+
+    processDayLogMap(dayLogsMap);
+    (peopleProfiles || []).forEach((person) => {
+      processDayLogMap(person?.logs);
+    });
+
+    return recovered;
+  };
+
   const [library, setLibrary] = useState<LibraryFoodItem[]>(() => {
     const activeLangCode = config.language?.code || 'ru';
     const waterName = getWaterProductName(activeLangCode);
+    let baseList: LibraryFoodItem[] = [];
+
     try {
       const saved = localStorage.getItem(STORAGE_KEY_LIBRARY);
       if (saved) {
         const parsed: LibraryFoodItem[] = JSON.parse(saved);
-        return parsed.map((f) =>
-          f.id === 'lib-water' ? { ...f, name: waterName } : f
-        );
-      }
-      // Preserve any custom user-created items from v1 library if present
-      const legacySaved = localStorage.getItem('pwa_calorie_food_library_v1');
-      if (legacySaved) {
-        const legacyParsed: LibraryFoodItem[] = JSON.parse(legacySaved);
-        const legacyPresetIds = new Set([
-          'lib-water',
-          'lib-1',
-          'lib-2',
-          'lib-3',
-          'lib-4',
-          'lib-5',
-          'lib-6',
-          'lib-7',
-          'lib-8',
-          'lib-9',
-          'lib-10',
-          'lib-11',
-          'lib-12',
-          'lib-13',
-        ]);
-        const userCustomItems = legacyParsed.filter((f) => !legacyPresetIds.has(f.id));
-        return [...buildDefaultLibrary(activeLangCode), ...userCustomItems];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          baseList = parsed.map(({ photoUrl, ...f }) =>
+            f.id === 'lib-water' ? { ...f, name: waterName } : f
+          );
+        }
       }
     } catch (e) {
       console.warn('Failed to parse saved library', e);
     }
-    return buildDefaultLibrary(activeLangCode);
+
+    if (baseList.length === 0) {
+      baseList = buildDefaultLibrary(activeLangCode);
+    }
+
+    // Merge any custom user-created items from legacy v1 library if not already present
+    try {
+      const legacySaved = localStorage.getItem('pwa_calorie_food_library_v1');
+      if (legacySaved) {
+        const legacyParsed: LibraryFoodItem[] = JSON.parse(legacySaved);
+        if (Array.isArray(legacyParsed)) {
+          const legacyPresetIds = new Set([
+            'lib-water',
+            'lib-1',
+            'lib-2',
+            'lib-3',
+            'lib-4',
+            'lib-5',
+            'lib-6',
+            'lib-7',
+            'lib-8',
+            'lib-9',
+            'lib-10',
+            'lib-11',
+            'lib-12',
+            'lib-13',
+          ]);
+          const existingNames = new Set(
+            baseList.map((item) => (item.name || '').trim().toLowerCase())
+          );
+          legacyParsed.forEach(({ photoUrl, ...item }) => {
+            const cleanName = (item.name || '').trim();
+            if (
+              cleanName &&
+              !legacyPresetIds.has(item.id) &&
+              !existingNames.has(cleanName.toLowerCase())
+            ) {
+              existingNames.add(cleanName.toLowerCase());
+              baseList.push(item);
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to merge legacy v1 library', e);
+    }
+
+    // Automatically recover any products recorded in past or current daily menus (logs & people profiles)
+    const recoveredFromLogs = extractMissingLibraryItemsFromLogs(baseList, logs, people);
+    if (recoveredFromLogs.length > 0) {
+      baseList = [...recoveredFromLogs, ...baseList];
+    }
+
+    return baseList;
   });
 
   // Recipes state (2 default recipes in English: 1 simple list + 1 full cooking Borscht)
@@ -660,14 +767,24 @@ export default function App() {
     return buildDefaultRecipes(activeLangCode);
   });
 
-  // Sync library and recipes to localStorage
+  // Sync library and recipes to localStorage (strip heavy base64 photoUrl to avoid 5MB localStorage quota error)
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_LIBRARY, JSON.stringify(library));
+      const compactLibrary = library.map(({ photoUrl, ...rest }) => rest);
+      localStorage.setItem(STORAGE_KEY_LIBRARY, JSON.stringify(compactLibrary));
     } catch (e) {
       console.error('Error saving library:', e);
     }
   }, [library]);
+
+  // Automatically sync any products from daily logs (past or current days across all profiles) into the Food Library
+  useEffect(() => {
+    setLibrary((prev) => {
+      const missing = extractMissingLibraryItemsFromLogs(prev, logs, people);
+      return missing.length > 0 ? [...missing, ...prev] : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logs, people]);
 
   useEffect(() => {
     try {
@@ -1030,7 +1147,7 @@ export default function App() {
     setIsChatOpen(true);
   };
 
-  // Add food item
+  // Add food item to daily log AND ensure it is saved in the permanent Food Library
   const handleSaveFood = (foodData: Omit<LoggedFoodItem, 'id' | 'timestamp'>) => {
     const newItem: LoggedFoodItem = {
       ...foodData,
@@ -1048,6 +1165,17 @@ export default function App() {
         },
       };
     });
+
+    const cleanName = (foodData.name || '').trim();
+    if (cleanName) {
+      const lower = cleanName.toLowerCase();
+      setLibrary((prev) => {
+        if (prev.some((f) => (f.name || '').trim().toLowerCase() === lower)) {
+          return prev;
+        }
+        return [createLibraryItemFromLoggedFood(newItem), ...prev];
+      });
+    }
   };
 
   // Delete food item
@@ -1079,7 +1207,7 @@ export default function App() {
     });
   };
 
-  // Add meals from Gemini chat
+  // Add meals from Gemini chat AND ensure new dishes are saved in the permanent Food Library
   const handleAddMealsFromAI = (
     suggestedMeals: Array<{
       mealCategoryId: string;
@@ -1106,6 +1234,19 @@ export default function App() {
           items: [...newItems, ...day.items],
         },
       };
+    });
+
+    setLibrary((prev) => {
+      const known = new Set(prev.map((f) => (f.name || '').trim().toLowerCase()));
+      const addedLibItems: LibraryFoodItem[] = [];
+      newItems.forEach((item) => {
+        const lower = (item.name || '').trim().toLowerCase();
+        if (lower && !known.has(lower)) {
+          known.add(lower);
+          addedLibItems.push(createLibraryItemFromLoggedFood(item));
+        }
+      });
+      return addedLibItems.length > 0 ? [...addedLibItems, ...prev] : prev;
     });
 
     setConfigToast({
@@ -1663,15 +1804,51 @@ export default function App() {
                 );
               }}
               onSaveToLibrary={(newItem) => {
-                setLibrary((prev) => [newItem, ...prev]);
+                const { photoUrl, ...cleanItem } = newItem;
+                const lowerName = (cleanItem.name || '').trim().toLowerCase();
+                if (lowerName) {
+                  const deletedSet = getDeletedLibraryNames();
+                  if (deletedSet.has(lowerName)) {
+                    deletedSet.delete(lowerName);
+                    try {
+                      localStorage.setItem(
+                        STORAGE_KEY_DELETED_LIB_NAMES,
+                        JSON.stringify(Array.from(deletedSet))
+                      );
+                    } catch {
+                      // ignore
+                    }
+                  }
+                }
+                setLibrary((prev) => {
+                  const filtered = prev.filter(
+                    (item) => (item.name || '').trim().toLowerCase() !== lowerName
+                  );
+                  return [cleanItem, ...filtered];
+                });
                 setConfigToast({
-                  message: `Продукт «${newItem.name}» добавлен в библиотеку!`,
+                  message: `Продукт «${cleanItem.name}» добавлен в библиотеку!`,
                   visible: true,
                 });
                 setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 3000);
               }}
               onDeleteFromLibrary={(id) => {
-                setLibrary((prev) => prev.filter((item) => item.id !== id));
+                setLibrary((prev) => {
+                  const target = prev.find((item) => item.id === id);
+                  if (target && target.name) {
+                    const deletedSet = getDeletedLibraryNames();
+                    deletedSet.add(target.name.trim().toLowerCase());
+                    try {
+                      localStorage.setItem(
+                        STORAGE_KEY_DELETED_LIB_NAMES,
+                        JSON.stringify(Array.from(deletedSet))
+                      );
+                    } catch {
+                      // ignore
+                    }
+                  }
+                  return prev.filter((item) => item.id !== id);
+                });
               }}
               onAddFoodToDayLog={(foodItem) => {
                 handleSaveFood(foodItem);

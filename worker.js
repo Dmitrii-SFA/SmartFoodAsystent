@@ -41,6 +41,26 @@ function getKvNamespace(env) {
   return null;
 }
 
+function parseKvRecord(rawText) {
+  if (!rawText) return null;
+  try {
+    const parsed = typeof rawText === "string" ? JSON.parse(rawText) : rawText;
+    if (parsed && typeof parsed === "object") {
+      const remaining =
+        typeof parsed.remaining === "number" && !Number.isNaN(parsed.remaining)
+          ? Math.max(0, Math.floor(parsed.remaining))
+          : PACKAGE_REQUESTS_LIMIT;
+      const devices = Array.isArray(parsed.devices)
+        ? parsed.devices.filter((d) => typeof d === "string" && d.trim().length > 0)
+        : [];
+      return { remaining, devices };
+    }
+  } catch {
+    // ignore malformed JSON
+  }
+  return null;
+}
+
 function checkRateLimit(clientKey) {
   const now = Date.now();
   const rawList = memoryRateLimits.get(clientKey) || [];
@@ -95,8 +115,7 @@ async function verifyAndLoadKeyState({
   const masterKey =
     typeof env?.MASTER_KEY === "string" ? env.MASTER_KEY.trim() : "";
 
-  // 1. Мастер-ключ из env.MASTER_KEY проверяется в первую очередь
-  // и даёт полный обход любых лимитов, привязок устройств и списаний.
+  // 1. Если введён ключ из env.MASTER_KEY — даём безлимитный доступ без ограничений
   if (masterKey && cleanKey === masterKey) {
     return {
       ok: true,
@@ -108,7 +127,6 @@ async function verifyAndLoadKeyState({
     };
   }
 
-  // 2. Проверка ключа по списку разрешённых базовых ключей (env.ALLOWED_KEYS)
   const allowedKeysRaw =
     typeof env?.ALLOWED_KEYS === "string" ? env.ALLOWED_KEYS : "";
   const allowedKeys = parseAllowedKeys(allowedKeysRaw);
@@ -116,76 +134,34 @@ async function verifyAndLoadKeyState({
 
   const kv = getKvNamespace(env);
 
-  // Если ключ не входит в ALLOWED_KEYS (и на сервере настроены ALLOWED_KEYS или MASTER_KEY),
-  // проверяем, нет ли его уже в USERS_KV; если нет — отклоняем как неверный ключ.
-  if (!isInAllowedKeys && (allowedKeys.length > 0 || Boolean(masterKey))) {
-    let existsInKv = false;
-    if (kv && cleanKey) {
-      try {
-        const existingRecord =
-          (await kv.get(cleanKey, "json")) ||
-          (await kv.get(`key_v1:${cleanKey}`, "json"));
-        if (existingRecord && typeof existingRecord === "object") {
-          existsInKv = true;
-        }
-      } catch {
-        // Игнорируем ошибку чтения KV при проверке
-      }
-    }
-
-    if (!existsInKv) {
-      return {
-        ok: false,
-        status: 403,
-        code: "INVALID_KEY",
-        error:
-          "Неверный ключ активации. Проверьте правильность введённого ключа.",
-      };
-    }
-  }
-
-  // 3. Работа с серверным хранилищем env.USERS_KV (динамический учёт 500 запросов и привязка до 2 устройств)
+  // 2. Если подключено хранилище env.USERS_KV — сначала ищем ключ как запись в USERS_KV
   if (kv) {
     try {
-      let storageKey = cleanKey;
-      let record = await kv.get(storageKey, "json");
+      const storageKey = cleanKey;
+      const rawExisting = await kv.get(storageKey);
+      let record = parseKvRecord(rawExisting);
+      let needsSave = false;
 
-      // Поддержка записей со старым префиксом key_v1:, если они уже были созданы
-      if (!record || typeof record !== "object") {
-        const legacyRecord = await kv.get(`key_v1:${cleanKey}`, "json");
-        if (legacyRecord && typeof legacyRecord === "object") {
-          record = legacyRecord;
+      // Если записи в USERS_KV ещё нет — проверяем, есть ли ключ в списке env.ALLOWED_KEYS (для друзей-тестеров)
+      if (!record) {
+        if (isInAllowedKeys) {
+          record = {
+            remaining: PACKAGE_REQUESTS_LIMIT,
+            devices: [],
+          };
+          needsSave = true;
+        } else {
+          // Ключа нет ни в USERS_KV, ни в ALLOWED_KEYS -> 403 Неверный ключ доступа
+          return {
+            ok: false,
+            status: 403,
+            code: "INVALID_KEY",
+            error: "Неверный ключ доступа",
+          };
         }
       }
 
-      let needsSave = false;
-
-      if (!record || typeof record !== "object") {
-        record = {
-          remaining: PACKAGE_REQUESTS_LIMIT,
-          total: PACKAGE_REQUESTS_LIMIT,
-          used: 0,
-          devices: [],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
-        needsSave = true;
-      }
-
-      if (!Array.isArray(record.devices)) {
-        record.devices = [];
-        needsSave = true;
-      }
-
-      if (
-        typeof record.remaining !== "number" ||
-        Number.isNaN(record.remaining)
-      ) {
-        record.remaining = PACKAGE_REQUESTS_LIMIT;
-        needsSave = true;
-      }
-
-      // Привязка устройства (максимум 2 устройства на 1 ключ)
+      // 3. Проверка привязки устройств в записи из USERS_KV (максимум 2 устройства)
       if (cleanDevice) {
         if (!record.devices.includes(cleanDevice)) {
           if (record.devices.length >= MAX_DEVICES_PER_KEY) {
@@ -198,15 +174,20 @@ async function verifyAndLoadKeyState({
           }
           if (registerDevice) {
             record.devices.push(cleanDevice);
-            record.updatedAt = Date.now();
             needsSave = true;
           }
         }
       }
 
-      // Сохраняем запись в env.USERS_KV при первой активации пакета 500 запросов или привязке нового устройства
-      if (needsSave && registerDevice) {
-        await kv.put(storageKey, JSON.stringify(record));
+      // Сохраняем новую запись (из ALLOWED_KEYS) или обновлённый список устройств в USERS_KV
+      if (needsSave) {
+        await kv.put(
+          storageKey,
+          JSON.stringify({
+            remaining: record.remaining,
+            devices: record.devices,
+          })
+        );
       }
 
       if (record.remaining <= 0) {
@@ -232,16 +213,23 @@ async function verifyAndLoadKeyState({
         record,
       };
     } catch (kvErr) {
-      // Если KV-хранилище временно выдало ошибку, код не падает
       console.warn(
-        "USERS_KV access error, falling back to in-memory/client balance tracking:",
+        "USERS_KV access error, falling back to ALLOWED_KEYS check:",
         kvErr
       );
     }
   }
 
-  // 4. Fallback, если env.USERS_KV временно не настроено:
-  // проверка по MASTER_KEY и ALLOWED_KEYS уже выполнена выше, код не падает
+  // Fallback на случай, если env.USERS_KV временно не привязано: проверяем по ALLOWED_KEYS
+  if (!isInAllowedKeys) {
+    return {
+      ok: false,
+      status: 403,
+      code: "INVALID_KEY",
+      error: "Неверный ключ доступа",
+    };
+  }
+
   if (cleanDevice) {
     const knownDevices = memoryKeyDevices.get(cleanKey) || [];
     if (!knownDevices.includes(cleanDevice)) {
@@ -383,7 +371,7 @@ export default {
           );
         }
 
-        // 2. Если пользователь передал ключ доступа — проверяем MASTER_KEY, ALLOWED_KEYS, привязку устройств и баланс в USERS_KV
+        // 2. Если передан ключ доступа — проверяем MASTER_KEY, затем USERS_KV и ALLOWED_KEYS
         let keyContext = null;
         if (accessKey) {
           keyContext = await verifyAndLoadKeyState({
@@ -414,7 +402,6 @@ export default {
         const isMaster = Boolean(keyContext && keyContext.isMaster);
 
         // 3. Проверка минутного лимита (3 запроса/мин) и защиты от двойного нажатия (10 сек)
-        // Для владельца с env.MASTER_KEY любые лимиты полностью отключены
         if (!isMaster) {
           clientRateKey = deviceId || accessKey || clientIp;
           const rateCheck = checkRateLimit(clientRateKey);
@@ -443,7 +430,8 @@ export default {
           if (recordedRateLimit) rollbackLastRateLimitTimestamp(clientRateKey);
           return new Response(
             JSON.stringify({
-              error: "GEMINI_API_KEY не найден в настройках воркера (env.GEMINI_API_KEY)",
+              error:
+                "GEMINI_API_KEY не найден в настройках воркера (env.GEMINI_API_KEY)",
             }),
             {
               status: 500,
@@ -487,8 +475,7 @@ export default {
           });
         }
 
-        // 5. При успешном ответе от Gemini (статус 200) списываем 1 запрос с баланса ключа в env.USERS_KV
-        // и возвращаем актуальный остаток на клиент
+        // 5. При успешном ответе от ИИ уменьшаем remaining на 1, сохраняем обновлённый JSON в USERS_KV и возвращаем остаток клиенту
         let updatedRemaining = null;
         let storageMode = keyContext ? keyContext.storageMode : "starter";
 
@@ -498,15 +485,13 @@ export default {
               0,
               keyContext.record.remaining - 1
             );
-            keyContext.record.used = Math.max(
-              0,
-              PACKAGE_REQUESTS_LIMIT - keyContext.record.remaining
-            );
-            keyContext.record.updatedAt = Date.now();
             updatedRemaining = keyContext.record.remaining;
             await keyContext.kv.put(
               keyContext.storageKey,
-              JSON.stringify(keyContext.record)
+              JSON.stringify({
+                remaining: keyContext.record.remaining,
+                devices: keyContext.record.devices,
+              })
             );
           } catch (kvWriteErr) {
             console.warn("USERS_KV write error on decrement:", kvWriteErr);

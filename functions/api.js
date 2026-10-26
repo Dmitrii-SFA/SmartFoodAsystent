@@ -40,6 +40,26 @@ function getKvNamespace(env) {
   return null;
 }
 
+function parseKvRecord(rawText) {
+  if (!rawText) return null;
+  try {
+    const parsed = typeof rawText === "string" ? JSON.parse(rawText) : rawText;
+    if (parsed && typeof parsed === "object") {
+      const remaining =
+        typeof parsed.remaining === "number" && !Number.isNaN(parsed.remaining)
+          ? Math.max(0, Math.floor(parsed.remaining))
+          : PACKAGE_REQUESTS_LIMIT;
+      const devices = Array.isArray(parsed.devices)
+        ? parsed.devices.filter((d) => typeof d === "string" && d.trim().length > 0)
+        : [];
+      return { remaining, devices };
+    }
+  } catch {
+    // ignore malformed JSON
+  }
+  return null;
+}
+
 function checkRateLimit(clientKey) {
   const now = Date.now();
   const rawList = memoryRateLimits.get(clientKey) || [];
@@ -94,7 +114,7 @@ async function verifyAndLoadKeyState({
   const masterKey =
     typeof env?.MASTER_KEY === "string" ? env.MASTER_KEY.trim() : "";
 
-  // 1. Мастер-ключ из env.MASTER_KEY проверяется в первую очередь
+  // 1. Если введён ключ из env.MASTER_KEY — даём безлимитный доступ без ограничений
   if (masterKey && cleanKey === masterKey) {
     return {
       ok: true,
@@ -106,7 +126,6 @@ async function verifyAndLoadKeyState({
     };
   }
 
-  // 2. Проверка по списку разрешённых ключей env.ALLOWED_KEYS
   const allowedKeysRaw =
     typeof env?.ALLOWED_KEYS === "string" ? env.ALLOWED_KEYS : "";
   const allowedKeys = parseAllowedKeys(allowedKeysRaw);
@@ -114,72 +133,33 @@ async function verifyAndLoadKeyState({
 
   const kv = getKvNamespace(env);
 
-  if (!isInAllowedKeys && (allowedKeys.length > 0 || Boolean(masterKey))) {
-    let existsInKv = false;
-    if (kv && cleanKey) {
-      try {
-        const existingRecord =
-          (await kv.get(cleanKey, "json")) ||
-          (await kv.get(`key_v1:${cleanKey}`, "json"));
-        if (existingRecord && typeof existingRecord === "object") {
-          existsInKv = true;
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    if (!existsInKv) {
-      return {
-        ok: false,
-        status: 403,
-        code: "INVALID_KEY",
-        error:
-          "Неверный ключ активации. Проверьте правильность введённого ключа.",
-      };
-    }
-  }
-
-  // 3. Работа с env.USERS_KV (500 запросов + максимум 2 устройства)
+  // 2. Сначала ищем ключ как запись в базе env.USERS_KV
   if (kv) {
     try {
       const storageKey = cleanKey;
-      let record = await kv.get(storageKey, "json");
+      const rawExisting = await kv.get(storageKey);
+      let record = parseKvRecord(rawExisting);
+      let needsSave = false;
 
-      if (!record || typeof record !== "object") {
-        const legacyRecord = await kv.get(`key_v1:${cleanKey}`, "json");
-        if (legacyRecord && typeof legacyRecord === "object") {
-          record = legacyRecord;
+      // Если записи в USERS_KV ещё нет — проверяем, есть ли этот ключ в списке env.ALLOWED_KEYS
+      if (!record) {
+        if (isInAllowedKeys) {
+          record = {
+            remaining: PACKAGE_REQUESTS_LIMIT,
+            devices: [],
+          };
+          needsSave = true;
+        } else {
+          return {
+            ok: false,
+            status: 403,
+            code: "INVALID_KEY",
+            error: "Неверный ключ доступа",
+          };
         }
       }
 
-      let needsSave = false;
-
-      if (!record || typeof record !== "object") {
-        record = {
-          remaining: PACKAGE_REQUESTS_LIMIT,
-          total: PACKAGE_REQUESTS_LIMIT,
-          used: 0,
-          devices: [],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
-        needsSave = true;
-      }
-
-      if (!Array.isArray(record.devices)) {
-        record.devices = [];
-        needsSave = true;
-      }
-
-      if (
-        typeof record.remaining !== "number" ||
-        Number.isNaN(record.remaining)
-      ) {
-        record.remaining = PACKAGE_REQUESTS_LIMIT;
-        needsSave = true;
-      }
-
+      // 3. Проверка и привязка x-device-id (максимум 2 устройства)
       if (cleanDevice) {
         if (!record.devices.includes(cleanDevice)) {
           if (record.devices.length >= MAX_DEVICES_PER_KEY) {
@@ -192,14 +172,19 @@ async function verifyAndLoadKeyState({
           }
           if (registerDevice) {
             record.devices.push(cleanDevice);
-            record.updatedAt = Date.now();
             needsSave = true;
           }
         }
       }
 
-      if (needsSave && registerDevice) {
-        await kv.put(storageKey, JSON.stringify(record));
+      if (needsSave) {
+        await kv.put(
+          storageKey,
+          JSON.stringify({
+            remaining: record.remaining,
+            devices: record.devices,
+          })
+        );
       }
 
       if (record.remaining <= 0) {
@@ -226,13 +211,22 @@ async function verifyAndLoadKeyState({
       };
     } catch (kvErr) {
       console.warn(
-        "Pages Function USERS_KV error, falling back to client balance tracking:",
+        "Pages Function USERS_KV error, falling back to ALLOWED_KEYS check:",
         kvErr
       );
     }
   }
 
-  // 4. Fallback если env.USERS_KV временно не настроено
+  // Fallback если env.USERS_KV временно не настроено
+  if (!isInAllowedKeys) {
+    return {
+      ok: false,
+      status: 403,
+      code: "INVALID_KEY",
+      error: "Неверный ключ доступа",
+    };
+  }
+
   if (cleanDevice) {
     const knownDevices = memoryKeyDevices.get(cleanKey) || [];
     if (!knownDevices.includes(cleanDevice)) {
@@ -448,15 +442,13 @@ export async function onRequestPost(context) {
           0,
           keyContext.record.remaining - 1
         );
-        keyContext.record.used = Math.max(
-          0,
-          PACKAGE_REQUESTS_LIMIT - keyContext.record.remaining
-        );
-        keyContext.record.updatedAt = Date.now();
         updatedRemaining = keyContext.record.remaining;
         await keyContext.kv.put(
           keyContext.storageKey,
-          JSON.stringify(keyContext.record)
+          JSON.stringify({
+            remaining: keyContext.record.remaining,
+            devices: keyContext.record.devices,
+          })
         );
       } catch (kvWriteErr) {
         console.warn("Pages Function USERS_KV write error:", kvWriteErr);
