@@ -101,18 +101,22 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
       onSaveAccessKey?.(cleaned);
       onSaveApiKey?.(cleaned);
       setActivatedSuccess(true);
+      const totalAvailable = result.remainingRequests ?? PAID_PACKAGE_REQUESTS;
+      const totalLimit = result.packageLimit ?? Math.max(PAID_PACKAGE_REQUESTS, totalAvailable);
+      const carryoverAdded = result.carryoverAdded ?? 0;
+
       setSuccessDetails(
         result.isMaster
           ? 'Мастер-ключ активирован! Включён полный безлимит запросов.'
-          : `Ключ успешно активирован! Доступно запросов: ${
-              result.remainingRequests ?? PAID_PACKAGE_REQUESTS
-            } из ${PAID_PACKAGE_REQUESTS}.`
+          : carryoverAdded > 0
+          ? `Ключ успешно активирован! Неизрасходованный остаток (+${carryoverAdded}) прибавлен к пакету ${PAID_PACKAGE_REQUESTS} — доступно запросов: ${totalAvailable}.`
+          : `Ключ успешно активирован! Доступно запросов: ${totalAvailable} из ${totalLimit}.`
       );
 
       setTimeout(() => {
         setActivatedSuccess(false);
         onClose();
-      }, 1300);
+      }, 1600);
     } catch (err: any) {
       setErrorMsg(err?.message || 'Ошибка при проверке ключа. Попробуйте ещё раз.');
     } finally {
@@ -177,12 +181,14 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                     ? 'Мастер-ключ владельца (Безлимит)'
                     : quota.hasAccessKey
                     ? quota.isKeyExhausted
-                      ? 'Пакет 500 запросов исчерпан'
-                      : 'Пакет 500 запросов активен'
+                      ? 'Пакет запросов по ключу исчерпан'
+                      : quota.packageLimit > PAID_PACKAGE_REQUESTS
+                      ? `Пакет активен (${PAID_PACKAGE_REQUESTS} + остаток)`
+                      : `Пакет ${PAID_PACKAGE_REQUESTS} запросов активен`
                     : `Стартовый пакет (${STARTER_FREE_REQUESTS} бесплатных)`}
                 </span>
                 <span className="text-[10px] opacity-80 block">
-                  Без ограничения по сроку действия
+                  Без ограничения по сроку действия • остаток суммируется при новом ключе
                 </span>
               </div>
             </div>
@@ -198,7 +204,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
             <div className="p-3 rounded-xl border border-amber-500/40 bg-amber-950/30 text-amber-200 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <span className="leading-relaxed">
-                Все {PAID_PACKAGE_REQUESTS} запросов по текущему ключу использованы. Приобретите новый пакет и введите новый ключ для следующих {PAID_PACKAGE_REQUESTS} запросов.
+                Все запросы по текущему ключу использованы. Приобретите новый пакет и введите новый ключ для следующих {PAID_PACKAGE_REQUESTS} запросов.
               </span>
             </div>
           )}
@@ -213,7 +219,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                 Пакет на {PAID_PACKAGE_REQUESTS} обращений к нейросети <strong>без ограничения по сроку действия</strong> (сканирование этикеток по фото, расчёт продуктов по названию, генерация рецептов и расчёт суточной нормы). Поддержка оплаты через <strong>BLIK и банковские карты</strong>.
               </p>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                • Запросы списываются только при успешном ответе ИИ. Ручное ведение дневника, база продуктов и рецептов всегда работают бесплатно.
+                • Неизрасходованные запросы не сгорают: при вводе нового ключа ваш текущий остаток автоматически прибавляется к {PAID_PACKAGE_REQUESTS} запросам.
               </p>
             </div>
 
@@ -249,17 +255,32 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-              <input
-                type="text"
-                value={keyInput}
-                onChange={(e) => {
-                  setKeyInput(e.target.value);
-                  setErrorMsg(null);
-                }}
-                disabled={isVerifying}
-                placeholder="Введите ключ активации на 500 запросов..."
-                className="flex-1 min-h-[40px] px-3.5 py-2 rounded-xl border border-slate-700 bg-slate-900 text-white font-mono text-xs placeholder-slate-500 focus:outline-hidden focus:border-emerald-500 disabled:opacity-60"
-              />
+              <div className="relative flex-1 flex items-center">
+                <input
+                  type="text"
+                  value={keyInput}
+                  onChange={(e) => {
+                    setKeyInput(e.target.value);
+                    setErrorMsg(null);
+                  }}
+                  disabled={isVerifying}
+                  placeholder="Введите ключ активации на 500 запросов..."
+                  className="w-full min-h-[40px] pl-3.5 pr-8 py-2 rounded-xl border border-slate-700 bg-slate-900 text-white font-mono text-xs placeholder-slate-500 focus:outline-hidden focus:border-emerald-500 disabled:opacity-60"
+                />
+                {keyInput && !isVerifying && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKeyInput('');
+                      setErrorMsg(null);
+                    }}
+                    className="absolute right-2 p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                    title="Очистить поле для ввода нового ключа"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
               <button
                 type="submit"
                 disabled={isVerifying}

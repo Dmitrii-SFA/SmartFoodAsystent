@@ -1072,7 +1072,9 @@ const MAX_REQUESTS_PER_MINUTE = 3;
 
 interface ServerKeyRecord {
   remaining: number;
+  initialLimit: number;
   devices: string[];
+  carryoverApplied: boolean;
   createdAt: number;
 }
 
@@ -1136,13 +1138,20 @@ function rollbackServerRateLimit(clientKey: string) {
   }
 }
 
-function verifyServerKeyState(accessKey: string, deviceId: string): {
+function verifyServerKeyState(
+  accessKey: string,
+  deviceId: string,
+  carryoverRequests: number = 0,
+  previousAccessKey: string = ''
+): {
   ok: boolean;
   status?: number;
   code?: string;
   error?: string;
   isMaster?: boolean;
   remainingRequests?: number | null;
+  packageLimit?: number | null;
+  carryoverAdded?: number;
   storageMode?: 'server' | 'client_fallback';
   devicesUsed?: number;
   maxDevices?: number | null;
@@ -1150,6 +1159,7 @@ function verifyServerKeyState(accessKey: string, deviceId: string): {
 } {
   const cleanKey = (accessKey || '').trim();
   const cleanDevice = (deviceId || '').trim();
+  const cleanPrevKey = (previousAccessKey || '').trim();
   const masterKey = (process.env.MASTER_KEY || process.env.OWNER_MASTER_KEY || '').trim();
 
   if (masterKey && cleanKey === masterKey) {
@@ -1157,6 +1167,8 @@ function verifyServerKeyState(accessKey: string, deviceId: string): {
       ok: true,
       isMaster: true,
       remainingRequests: null,
+      packageLimit: null,
+      carryoverAdded: 0,
       storageMode: 'server',
       devicesUsed: 0,
       maxDevices: null,
@@ -1180,11 +1192,16 @@ function verifyServerKeyState(accessKey: string, deviceId: string): {
     if (!record) {
       record = {
         remaining: PACKAGE_REQUESTS_LIMIT,
+        initialLimit: PACKAGE_REQUESTS_LIMIT,
         devices: [],
+        carryoverApplied: false,
         createdAt: Date.now(),
       };
       serverKeyStore.set(cleanKey, record);
     }
+
+    const isFirstActivation = !record.carryoverApplied && record.devices.length === 0;
+    let carryoverAdded = 0;
 
     if (cleanDevice) {
       if (!record.devices.includes(cleanDevice)) {
@@ -1200,13 +1217,34 @@ function verifyServerKeyState(accessKey: string, deviceId: string): {
       }
     }
 
+    if (isFirstActivation) {
+      let bonusToAdd = 0;
+      if (cleanPrevKey && cleanPrevKey.toLowerCase() !== cleanKey.toLowerCase()) {
+        const prevRec = serverKeyStore.get(cleanPrevKey);
+        if (prevRec && prevRec.remaining > 0) {
+          bonusToAdd = prevRec.remaining;
+          prevRec.remaining = 0;
+        }
+      }
+      if (bonusToAdd === 0 && carryoverRequests > 0) {
+        bonusToAdd = Math.min(5000, Math.max(0, Math.floor(carryoverRequests)));
+      }
+      if (bonusToAdd > 0) {
+        record.remaining += bonusToAdd;
+        carryoverAdded = bonusToAdd;
+      }
+      record.initialLimit = Math.max(record.initialLimit || PACKAGE_REQUESTS_LIMIT, record.remaining);
+      record.carryoverApplied = true;
+    }
+
     if (record.remaining <= 0) {
       return {
         ok: false,
         status: 402,
         code: 'KEY_EXHAUSTED',
         remainingRequests: 0,
-        error: 'Лимит в 500 ИИ-запросов по этому ключу исчерпан. Пожалуйста, приобретите новый пакет и введите новый ключ активации.',
+        packageLimit: record.initialLimit || PACKAGE_REQUESTS_LIMIT,
+        error: 'Лимит ИИ-запросов по этому ключу исчерпан. Пожалуйста, приобретите новый пакет и введите новый ключ активации.',
       };
     }
 
@@ -1214,6 +1252,8 @@ function verifyServerKeyState(accessKey: string, deviceId: string): {
       ok: true,
       isMaster: false,
       remainingRequests: record.remaining,
+      packageLimit: Math.max(record.initialLimit || PACKAGE_REQUESTS_LIMIT, record.remaining),
+      carryoverAdded,
       storageMode: 'server',
       devicesUsed: record.devices.length,
       maxDevices: MAX_DEVICES_PER_KEY,
@@ -1225,11 +1265,16 @@ function verifyServerKeyState(accessKey: string, deviceId: string): {
   if (!fallbackRecord) {
     fallbackRecord = {
       remaining: PACKAGE_REQUESTS_LIMIT,
+      initialLimit: PACKAGE_REQUESTS_LIMIT,
       devices: [],
+      carryoverApplied: false,
       createdAt: Date.now(),
     };
     serverKeyStore.set(cleanKey, fallbackRecord);
   }
+
+  const isFirstFallbackActivation = !fallbackRecord.carryoverApplied && fallbackRecord.devices.length === 0;
+  let fallbackCarryoverAdded = 0;
 
   if (cleanDevice && !fallbackRecord.devices.includes(cleanDevice)) {
     if (fallbackRecord.devices.length >= MAX_DEVICES_PER_KEY) {
@@ -1243,10 +1288,22 @@ function verifyServerKeyState(accessKey: string, deviceId: string): {
     fallbackRecord.devices.push(cleanDevice);
   }
 
+  if (isFirstFallbackActivation) {
+    const bonus = carryoverRequests > 0 ? Math.min(5000, Math.max(0, Math.floor(carryoverRequests))) : 0;
+    if (bonus > 0) {
+      fallbackRecord.remaining += bonus;
+      fallbackCarryoverAdded = bonus;
+    }
+    fallbackRecord.initialLimit = Math.max(PACKAGE_REQUESTS_LIMIT, fallbackRecord.remaining);
+    fallbackRecord.carryoverApplied = true;
+  }
+
   return {
     ok: true,
     isMaster: false,
     remainingRequests: null,
+    packageLimit: null,
+    carryoverAdded: fallbackCarryoverAdded,
     storageMode: 'client_fallback',
     devicesUsed: fallbackRecord.devices.length || 1,
     maxDevices: MAX_DEVICES_PER_KEY,
@@ -1304,13 +1361,19 @@ app.post(['/api', '/api/verify-key'], async (req: Request, res: Response) => {
         return;
       }
 
-      const verification = verifyServerKeyState(accessKey, deviceId);
+      const verification = verifyServerKeyState(
+        accessKey,
+        deviceId,
+        typeof requestData.carryoverRequests === 'number' ? requestData.carryoverRequests : 0,
+        typeof requestData.previousAccessKey === 'string' ? requestData.previousAccessKey : ''
+      );
       if (!verification.ok) {
         res.status(verification.status || 403).json({
           valid: false,
           error: verification.error,
           code: verification.code,
           remainingRequests: verification.remainingRequests ?? undefined,
+          packageLimit: verification.packageLimit ?? undefined,
         });
         return;
       }
@@ -1319,6 +1382,8 @@ app.post(['/api', '/api/verify-key'], async (req: Request, res: Response) => {
         valid: true,
         isMaster: verification.isMaster,
         remainingRequests: verification.remainingRequests,
+        packageLimit: verification.packageLimit,
+        carryoverAdded: verification.carryoverAdded || 0,
         storageMode: verification.storageMode,
         devicesUsed: verification.devicesUsed,
         maxDevices: verification.maxDevices,

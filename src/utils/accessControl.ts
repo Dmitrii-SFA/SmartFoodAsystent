@@ -13,6 +13,7 @@ export const ACCESS_KEY_STORAGE_KEY = 'app_access_key';
 const DEVICE_ID_STORAGE_KEY = 'sfa_device_id_v1';
 const STARTER_REMAINING_STORAGE_KEY = 'sfa_starter_remaining_v1';
 const KEY_BALANCES_STORAGE_KEY = 'sfa_key_balances_v1';
+const KEY_LIMITS_STORAGE_KEY = 'sfa_key_limits_v1';
 const MASTER_KEY_FLAG_STORAGE_KEY = 'sfa_is_master_key_v1';
 const RECENT_TIMESTAMPS_STORAGE_KEY = 'sfa_recent_ai_timestamps_v1';
 
@@ -46,6 +47,8 @@ export interface KeyVerificationResult {
   valid: boolean;
   isMaster?: boolean;
   remainingRequests?: number | null;
+  packageLimit?: number | null;
+  carryoverAdded?: number;
   storageMode?: 'server' | 'client_fallback';
   devicesUsed?: number;
   maxDevices?: number | null;
@@ -136,6 +139,51 @@ function saveKeyBalancesMap(map: Record<string, number>): void {
   }
 }
 
+function loadKeyLimitsMap(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(KEY_LIMITS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
+function saveKeyLimitsMap(map: Record<string, number>): void {
+  try {
+    localStorage.setItem(KEY_LIMITS_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+export function getKeyPackageLimit(key: string): number {
+  const clean = (key || '').trim();
+  if (!clean) return PAID_PACKAGE_REQUESTS;
+  const map = loadKeyLimitsMap();
+  const rem = getKeyRemainingBalance(clean);
+  if (typeof map[clean] === 'number' && !Number.isNaN(map[clean]) && map[clean] > 0) {
+    return Math.max(PAID_PACKAGE_REQUESTS, Math.floor(map[clean]), rem);
+  }
+  const initial = Math.max(PAID_PACKAGE_REQUESTS, rem);
+  map[clean] = initial;
+  saveKeyLimitsMap(map);
+  return initial;
+}
+
+export function setKeyPackageLimit(key: string, limit: number): void {
+  const clean = (key || '').trim();
+  if (!clean) return;
+  const map = loadKeyLimitsMap();
+  map[clean] = Math.max(PAID_PACKAGE_REQUESTS, Math.floor(Number(limit) || PAID_PACKAGE_REQUESTS));
+  saveKeyLimitsMap(map);
+}
+
 export function getKeyRemainingBalance(key: string): number {
   const clean = (key || '').trim();
   if (!clean) return 0;
@@ -152,9 +200,19 @@ export function getKeyRemainingBalance(key: string): number {
 export function setKeyRemainingBalance(key: string, remaining: number): void {
   const clean = (key || '').trim();
   if (!clean) return;
+  const normalized = Math.max(0, Math.floor(Number(remaining) || 0));
   const map = loadKeyBalancesMap();
-  map[clean] = Math.max(0, Math.floor(Number(remaining) || 0));
+  map[clean] = normalized;
   saveKeyBalancesMap(map);
+
+  // Если баланс превышает текущий сохранённый лимит пакета (например, 533 из-за переноса остатка), обновляем лимит пакета
+  const limitsMap = loadKeyLimitsMap();
+  const currentLimit = limitsMap[clean] || PAID_PACKAGE_REQUESTS;
+  if (normalized > currentLimit) {
+    limitsMap[clean] = normalized;
+    saveKeyLimitsMap(limitsMap);
+  }
+
   notifyQuotaUpdated();
 }
 
@@ -188,15 +246,20 @@ export function getStarterRemainingRequests(): number {
   }
 }
 
+export function setStarterRemainingRequests(remaining: number): void {
+  const normalized = Math.max(0, Math.min(STARTER_FREE_REQUESTS, Math.floor(Number(remaining) || 0)));
+  try {
+    localStorage.setItem(STARTER_REMAINING_STORAGE_KEY, String(normalized));
+  } catch (e) {
+    console.error('Failed to set starter remaining requests:', e);
+  }
+  notifyQuotaUpdated();
+}
+
 export function decrementStarterRemainingRequests(): number {
   const current = getStarterRemainingRequests();
   const next = Math.max(0, current - 1);
-  try {
-    localStorage.setItem(STARTER_REMAINING_STORAGE_KEY, String(next));
-  } catch (e) {
-    console.error('Failed to update starter remaining requests:', e);
-  }
-  notifyQuotaUpdated();
+  setStarterRemainingRequests(next);
   return next;
 }
 
@@ -246,8 +309,8 @@ export function checkAndActivateUrlAccessKey(): string | null {
 }
 
 /**
- * Серверная проверка ключа (валидность по списку разрешенных, привязка к максимум 2 устройствам, баланс 500 запросов, мастер-ключ)
- * с защитой от падения, если хранилище на сервере еще не подключено.
+ * Серверная проверка ключа (валидность по списку разрешенных, привязка к максимум 2 устройствам,
+ * суммирование неизрасходованного остатка с 500 запросами нового ключа, мастер-ключ)
  */
 export async function verifyAndActivateAccessKey(rawKey: string): Promise<KeyVerificationResult> {
   const cleanKey = (rawKey || '').trim();
@@ -260,6 +323,33 @@ export async function verifyAndActivateAccessKey(rawKey: string): Promise<KeyVer
   }
 
   const deviceId = getOrCreateDeviceId();
+  const previousAccessKey = getSavedAccessKey();
+  const isSameKey =
+    previousAccessKey.length > 0 &&
+    previousAccessKey.toLowerCase() === cleanKey.toLowerCase();
+  const wasMaster = isMasterAccessKeyActive();
+  const existingBalances = loadKeyBalancesMap();
+  const isBrandNewKeyLocally = typeof existingBalances[cleanKey] !== 'number';
+
+  // Вычисляем текущий неизрасходованный остаток пользователя (со старого ключа или со стартового пакета),
+  // чтобы при первой активации нового ключа он прибавился к 500 запросам (например, 500 + 33 = 533).
+  const currentCarryover =
+    !isSameKey && !wasMaster
+      ? previousAccessKey
+        ? getKeyRemainingBalance(previousAccessKey)
+        : getStarterRemainingRequests()
+      : 0;
+
+  const applyLocalCarryoverCleanup = () => {
+    if (!isSameKey && !wasMaster && currentCarryover > 0) {
+      if (previousAccessKey) {
+        setKeyRemainingBalance(previousAccessKey, 0);
+      } else {
+        setStarterRemainingRequests(0);
+      }
+    }
+  };
+
   const candidateUrls: string[] = [
     '/api',
     CLOUDFLARE_WORKER_URL,
@@ -271,6 +361,8 @@ export async function verifyAndActivateAccessKey(rawKey: string): Promise<KeyVer
     action: 'verify_key',
     accessKey: cleanKey,
     deviceId,
+    carryoverRequests: currentCarryover,
+    previousAccessKey: !isSameKey ? previousAccessKey : '',
   };
 
   for (let i = 0; i < uniqueUrls.length; i++) {
@@ -306,58 +398,111 @@ export async function verifyAndActivateAccessKey(rawKey: string): Promise<KeyVer
             data?.message ||
             'Не удалось активировать ключ. Проверьте код или лимит устройств.',
           remainingRequests: typeof data?.remainingRequests === 'number' ? data.remainingRequests : undefined,
+          packageLimit: typeof data?.packageLimit === 'number' ? data.packageLimit : undefined,
         };
       }
 
       // Если сервер успешно подтвердил ключ
       if (res.ok && data?.valid === true) {
-        saveAccessKey(cleanKey);
         const isMaster = Boolean(data.isMaster);
-        setMasterAccessKeyActive(isMaster);
+        let carryoverAdded =
+          typeof data.carryoverAdded === 'number' && data.carryoverAdded > 0
+            ? data.carryoverAdded
+            : 0;
+
         if (!isMaster && typeof data.remainingRequests === 'number') {
           setKeyRemainingBalance(cleanKey, data.remainingRequests);
+          const resolvedLimit =
+            typeof data.packageLimit === 'number' && data.packageLimit > 0
+              ? Math.max(data.packageLimit, data.remainingRequests)
+              : Math.max(PAID_PACKAGE_REQUESTS, data.remainingRequests);
+          setKeyPackageLimit(cleanKey, resolvedLimit);
+          applyLocalCarryoverCleanup();
         } else if (!isMaster) {
-          getKeyRemainingBalance(cleanKey);
+          if (isBrandNewKeyLocally && currentCarryover > 0) {
+            const combined = PAID_PACKAGE_REQUESTS + currentCarryover;
+            setKeyRemainingBalance(cleanKey, combined);
+            setKeyPackageLimit(cleanKey, combined);
+            carryoverAdded = currentCarryover;
+            applyLocalCarryoverCleanup();
+          } else {
+            getKeyRemainingBalance(cleanKey);
+          }
         }
+
+        saveAccessKey(cleanKey);
+        setMasterAccessKeyActive(isMaster);
         notifyQuotaUpdated();
+
         return {
           valid: true,
           isMaster,
           remainingRequests: isMaster ? null : getKeyRemainingBalance(cleanKey),
+          packageLimit: isMaster ? null : getKeyPackageLimit(cleanKey),
+          carryoverAdded,
           storageMode: data.storageMode || 'client_fallback',
           devicesUsed: data.devicesUsed,
           maxDevices: data.maxDevices ?? MAX_DEVICES_PER_KEY,
         };
       }
 
-      // Fallback: если удаленный воркер еще не обновлен и не знает про action="verify_key",
-      // сохраняем ключ локально с балансом 500 запросов (проверка пройдет при первом запросе к ИИ)
+      // Fallback: если удаленный воркер еще не обновлен и не знает про action="verify_key"
+      let fallbackCarryoverAdded = 0;
+      if (isBrandNewKeyLocally && currentCarryover > 0) {
+        const combined = PAID_PACKAGE_REQUESTS + currentCarryover;
+        setKeyRemainingBalance(cleanKey, combined);
+        setKeyPackageLimit(cleanKey, combined);
+        fallbackCarryoverAdded = currentCarryover;
+        applyLocalCarryoverCleanup();
+      }
       saveAccessKey(cleanKey);
       return {
         valid: true,
         isMaster: false,
         remainingRequests: getKeyRemainingBalance(cleanKey),
+        packageLimit: getKeyPackageLimit(cleanKey),
+        carryoverAdded: fallbackCarryoverAdded,
         storageMode: 'client_fallback',
       };
     } catch {
       if (i === uniqueUrls.length - 1) {
-        // При временной недоступности сети сохраняем ключ в клиентский fallback (500 запросов)
+        // При временной недоступности сети сохраняем ключ в клиентский fallback с учётом остатка
+        let fallbackCarryoverAdded = 0;
+        if (isBrandNewKeyLocally && currentCarryover > 0) {
+          const combined = PAID_PACKAGE_REQUESTS + currentCarryover;
+          setKeyRemainingBalance(cleanKey, combined);
+          setKeyPackageLimit(cleanKey, combined);
+          fallbackCarryoverAdded = currentCarryover;
+          applyLocalCarryoverCleanup();
+        }
         saveAccessKey(cleanKey);
         return {
           valid: true,
           isMaster: false,
           remainingRequests: getKeyRemainingBalance(cleanKey),
+          packageLimit: getKeyPackageLimit(cleanKey),
+          carryoverAdded: fallbackCarryoverAdded,
           storageMode: 'client_fallback',
         };
       }
     }
   }
 
+  let fallbackCarryoverAdded = 0;
+  if (isBrandNewKeyLocally && currentCarryover > 0) {
+    const combined = PAID_PACKAGE_REQUESTS + currentCarryover;
+    setKeyRemainingBalance(cleanKey, combined);
+    setKeyPackageLimit(cleanKey, combined);
+    fallbackCarryoverAdded = currentCarryover;
+    applyLocalCarryoverCleanup();
+  }
   saveAccessKey(cleanKey);
   return {
     valid: true,
     isMaster: false,
     remainingRequests: getKeyRemainingBalance(cleanKey),
+    packageLimit: getKeyPackageLimit(cleanKey),
+    carryoverAdded: fallbackCarryoverAdded,
     storageMode: 'client_fallback',
   };
 }
@@ -445,21 +590,22 @@ export function getQuotaStatus(): {
 
   if (hasAccessKey) {
     const keyRemaining = getKeyRemainingBalance(accessKey);
-    const usedRequests = Math.max(0, PAID_PACKAGE_REQUESTS - keyRemaining);
+    const keyLimit = Math.max(getKeyPackageLimit(accessKey), keyRemaining);
+    const usedRequests = Math.max(0, keyLimit - keyRemaining);
     const isKeyExhausted = keyRemaining <= 0;
     return {
       hasAccessKey: true,
       accessKey,
       isMasterKey: false,
       remainingRequests: keyRemaining,
-      packageLimit: PAID_PACKAGE_REQUESTS,
+      packageLimit: keyLimit,
       usedRequests,
       starterRemaining,
       keyRemaining,
       isKeyExhausted,
       deviceId,
       usedToday: usedRequests,
-      dailyLimit: PAID_PACKAGE_REQUESTS,
+      dailyLimit: keyLimit,
       remainingToday: keyRemaining,
     };
   }
@@ -492,7 +638,8 @@ export function incrementDailyUsageCount(): number {
   if (status.isMasterKey) return 0;
   if (status.hasAccessKey) {
     const rem = decrementKeyRemainingBalance(status.accessKey);
-    return Math.max(0, PAID_PACKAGE_REQUESTS - rem);
+    const limit = getKeyPackageLimit(status.accessKey);
+    return Math.max(0, limit - rem);
   }
   const rem = decrementStarterRemainingRequests();
   return Math.max(0, STARTER_FREE_REQUESTS - rem);
@@ -863,9 +1010,19 @@ export async function callCloudflareWorkerAI(payload: {
         ? Number(headerRem)
         : null;
 
+    const serverPackageLimit =
+      typeof data?._quota?.packageLimit === 'number'
+        ? data._quota.packageLimit
+        : typeof data?.packageLimit === 'number'
+        ? data.packageLimit
+        : null;
+
     if (serverRemaining !== null) {
       // Серверное хранилище вернуло точный остаток по ключу
       setKeyRemainingBalance(savedAccessKey, serverRemaining);
+      if (serverPackageLimit !== null && serverPackageLimit > 0) {
+        setKeyPackageLimit(savedAccessKey, Math.max(serverPackageLimit, serverRemaining));
+      }
     } else {
       // Fallback: если серверное хранилище еще не подключено, клиент сам уменьшает баланс из 500 на 1
       decrementKeyRemainingBalance(savedAccessKey);

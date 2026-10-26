@@ -53,12 +53,20 @@ function parseKvRecord(rawText) {
         : typeof rawRem === "string" && /^\d+$/.test(rawRem.trim())
         ? Math.max(0, parseInt(rawRem.trim(), 10))
         : PACKAGE_REQUESTS_LIMIT;
+    const rawInit = rawText.initialLimit ?? rawText.packageLimit;
+    const initialLimit =
+      typeof rawInit === "number" && !Number.isNaN(rawInit) && rawInit > 0
+        ? Math.max(remaining, Math.floor(rawInit))
+        : Math.max(PACKAGE_REQUESTS_LIMIT, remaining);
     const devices = Array.isArray(rawText.devices)
       ? rawText.devices.filter((d) => typeof d === "string" && d.trim().length > 0)
       : [];
+    const carryoverApplied = Boolean(rawText.carryoverApplied);
     return {
       remaining,
+      initialLimit,
       devices,
+      carryoverApplied,
       needsNormalization: !(
         typeof rawText.remaining === "number" && Array.isArray(rawText.devices)
       ),
@@ -66,9 +74,12 @@ function parseKvRecord(rawText) {
   }
 
   if (typeof rawText === "number" && !Number.isNaN(rawText)) {
+    const rem = Math.max(0, Math.floor(rawText));
     return {
-      remaining: Math.max(0, Math.floor(rawText)),
+      remaining: rem,
+      initialLimit: Math.max(PACKAGE_REQUESTS_LIMIT, rem),
       devices: [],
+      carryoverApplied: false,
       needsNormalization: true,
     };
   }
@@ -88,14 +99,22 @@ function parseKvRecord(rawText) {
             : typeof rawRem === "string" && /^\d+$/.test(rawRem.trim())
             ? Math.max(0, parseInt(rawRem.trim(), 10))
             : PACKAGE_REQUESTS_LIMIT;
+        const rawInit = parsed.initialLimit ?? parsed.packageLimit;
+        const initialLimit =
+          typeof rawInit === "number" && !Number.isNaN(rawInit) && rawInit > 0
+            ? Math.max(remaining, Math.floor(rawInit))
+            : Math.max(PACKAGE_REQUESTS_LIMIT, remaining);
         const devices = Array.isArray(parsed.devices)
           ? parsed.devices.filter(
               (d) => typeof d === "string" && d.trim().length > 0
             )
           : [];
+        const carryoverApplied = Boolean(parsed.carryoverApplied);
         return {
           remaining,
+          initialLimit,
           devices,
+          carryoverApplied,
           needsNormalization: !(
             typeof parsed.remaining === "number" &&
             Array.isArray(parsed.devices)
@@ -103,9 +122,12 @@ function parseKvRecord(rawText) {
         };
       }
       if (typeof parsed === "number" && !Number.isNaN(parsed)) {
+        const rem = Math.max(0, Math.floor(parsed));
         return {
-          remaining: Math.max(0, Math.floor(parsed)),
+          remaining: rem,
+          initialLimit: Math.max(PACKAGE_REQUESTS_LIMIT, rem),
           devices: [],
+          carryoverApplied: false,
           needsNormalization: true,
         };
       }
@@ -117,9 +139,12 @@ function parseKvRecord(rawText) {
   // Если в Value записано просто число (например "500" или "500 запросов")
   const numericMatch = text.match(/^(\d{1,6})(?:\s|$)/);
   if (numericMatch) {
+    const rem = Math.max(0, parseInt(numericMatch[1], 10));
     return {
-      remaining: Math.max(0, parseInt(numericMatch[1], 10)),
+      remaining: rem,
+      initialLimit: Math.max(PACKAGE_REQUESTS_LIMIT, rem),
       devices: [],
+      carryoverApplied: false,
       needsNormalization: true,
     };
   }
@@ -127,7 +152,9 @@ function parseKvRecord(rawText) {
   // Любой другой текст ("active", "true", имя пользователя или пустое значение существующего ключа)
   return {
     remaining: PACKAGE_REQUESTS_LIMIT,
+    initialLimit: PACKAGE_REQUESTS_LIMIT,
     devices: [],
+    carryoverApplied: false,
     needsNormalization: true,
   };
 }
@@ -236,9 +263,12 @@ async function verifyAndLoadKeyState({
   deviceId,
   env,
   registerDevice = true,
+  carryoverRequests = 0,
+  previousAccessKey = "",
 }) {
   const cleanKey = (accessKey || "").trim();
   const cleanDevice = (deviceId || "").trim();
+  const cleanPrevKey = (previousAccessKey || "").trim();
   const masterKey =
     typeof env?.MASTER_KEY === "string" ? env.MASTER_KEY.trim() : "";
 
@@ -248,6 +278,8 @@ async function verifyAndLoadKeyState({
       ok: true,
       isMaster: true,
       remainingRequests: null,
+      packageLimit: null,
+      carryoverAdded: 0,
       storageMode: "server",
       devicesUsed: 0,
       maxDevices: null,
@@ -276,7 +308,9 @@ async function verifyAndLoadKeyState({
         if (isInAllowedKeys) {
           record = {
             remaining: PACKAGE_REQUESTS_LIMIT,
+            initialLimit: PACKAGE_REQUESTS_LIMIT,
             devices: [],
+            carryoverApplied: false,
             needsNormalization: false,
           };
           needsSave = true;
@@ -290,6 +324,11 @@ async function verifyAndLoadKeyState({
           };
         }
       }
+
+      // Проверяем, является ли это самой первой активацией ключа (ни одно устройство ещё не привязано)
+      const isFirstActivation =
+        !record.carryoverApplied && record.devices.length === 0;
+      let carryoverAdded = 0;
 
       // 3. Проверка привязки устройств в записи из USERS_KV (максимум 2 устройства)
       if (cleanDevice) {
@@ -309,13 +348,73 @@ async function verifyAndLoadKeyState({
         }
       }
 
-      // Сохраняем нормализованную запись или обновлённый список устройств в USERS_KV
+      // 4. При первой активации нового ключа прибавляем неизрасходованный остаток запросов (со старого ключа или со стартового пакета)
+      if (isFirstActivation && registerDevice) {
+        let bonusToAdd = 0;
+
+        // Если пользователь переходит со старого ключа на новый — проверяем остаток старого ключа в USERS_KV и обнуляем его
+        if (
+          cleanPrevKey &&
+          cleanPrevKey.toLowerCase() !== cleanKey.toLowerCase() &&
+          (!masterKey || cleanPrevKey !== masterKey)
+        ) {
+          try {
+            const foundPrev = await findKeyInUsersKv(kv, cleanPrevKey);
+            if (foundPrev) {
+              const prevRecord = parseKvRecord(foundPrev.rawExisting);
+              if (prevRecord && prevRecord.remaining > 0) {
+                bonusToAdd = prevRecord.remaining;
+                await kv.put(
+                  foundPrev.storageKey,
+                  JSON.stringify({
+                    remaining: 0,
+                    initialLimit: prevRecord.initialLimit || PACKAGE_REQUESTS_LIMIT,
+                    devices: prevRecord.devices,
+                    carryoverApplied: true,
+                  })
+                );
+              }
+            }
+          } catch (prevErr) {
+            console.warn("Failed to transfer carryover from previous key:", prevErr);
+          }
+        }
+
+        // Если остаток передан с клиента (например, неизрасходованные запросы со стартового пакета)
+        if (
+          bonusToAdd === 0 &&
+          typeof carryoverRequests === "number" &&
+          !Number.isNaN(carryoverRequests) &&
+          carryoverRequests > 0
+        ) {
+          bonusToAdd = Math.min(5000, Math.max(0, Math.floor(carryoverRequests)));
+        }
+
+        if (bonusToAdd > 0) {
+          record.remaining += bonusToAdd;
+          carryoverAdded = bonusToAdd;
+        }
+
+        record.initialLimit = Math.max(
+          record.initialLimit || PACKAGE_REQUESTS_LIMIT,
+          record.remaining
+        );
+        record.carryoverApplied = true;
+        needsSave = true;
+      }
+
+      // Сохраняем нормализованную запись или обновлённый список устройств и суммарный баланс в USERS_KV
       if (needsSave) {
         await kv.put(
           storageKey,
           JSON.stringify({
             remaining: record.remaining,
+            initialLimit: Math.max(
+              record.initialLimit || PACKAGE_REQUESTS_LIMIT,
+              record.remaining
+            ),
             devices: record.devices,
+            carryoverApplied: Boolean(record.carryoverApplied),
           })
         );
       }
@@ -326,8 +425,9 @@ async function verifyAndLoadKeyState({
           status: 402,
           code: "KEY_EXHAUSTED",
           remainingRequests: 0,
+          packageLimit: record.initialLimit || PACKAGE_REQUESTS_LIMIT,
           error:
-            "Лимит в 500 ИИ-запросов по этому ключу исчерпан. Пожалуйста, приобретите новый пакет и введите новый ключ активации.",
+            "Лимит ИИ-запросов по этому ключу исчерпан. Пожалуйста, приобретите новый пакет и введите новый ключ активации.",
         };
       }
 
@@ -335,6 +435,11 @@ async function verifyAndLoadKeyState({
         ok: true,
         isMaster: false,
         remainingRequests: record.remaining,
+        packageLimit: Math.max(
+          record.initialLimit || PACKAGE_REQUESTS_LIMIT,
+          record.remaining
+        ),
+        carryoverAdded,
         storageMode: "server",
         devicesUsed: record.devices.length,
         maxDevices: MAX_DEVICES_PER_KEY,
@@ -465,6 +570,14 @@ export default {
             deviceId,
             env,
             registerDevice: true,
+            carryoverRequests:
+              typeof requestData.carryoverRequests === "number"
+                ? requestData.carryoverRequests
+                : 0,
+            previousAccessKey:
+              typeof requestData.previousAccessKey === "string"
+                ? requestData.previousAccessKey
+                : "",
           });
 
           if (!verification.ok) {
@@ -474,6 +587,7 @@ export default {
                 error: verification.error,
                 code: verification.code,
                 remainingRequests: verification.remainingRequests ?? undefined,
+                packageLimit: verification.packageLimit ?? undefined,
               }),
               {
                 status: verification.status || 403,
@@ -490,6 +604,8 @@ export default {
               valid: true,
               isMaster: verification.isMaster,
               remainingRequests: verification.remainingRequests,
+              packageLimit: verification.packageLimit,
+              carryoverAdded: verification.carryoverAdded || 0,
               storageMode: verification.storageMode,
               devicesUsed: verification.devicesUsed,
               maxDevices: verification.maxDevices,
@@ -517,6 +633,7 @@ export default {
                 error: keyContext.error,
                 code: keyContext.code,
                 remainingRequests: keyContext.remainingRequests ?? undefined,
+                packageLimit: keyContext.packageLimit ?? undefined,
               }),
               {
                 status: keyContext.status || 403,
@@ -607,6 +724,7 @@ export default {
 
         // 5. При успешном ответе от ИИ уменьшаем remaining на 1, сохраняем обновлённый JSON в USERS_KV и возвращаем остаток клиенту
         let updatedRemaining = null;
+        let updatedPackageLimit = null;
         let storageMode = keyContext ? keyContext.storageMode : "starter";
 
         if (keyContext && !isMaster && keyContext.kv && keyContext.record) {
@@ -616,11 +734,17 @@ export default {
               keyContext.record.remaining - 1
             );
             updatedRemaining = keyContext.record.remaining;
+            updatedPackageLimit = Math.max(
+              keyContext.record.initialLimit || PACKAGE_REQUESTS_LIMIT,
+              updatedRemaining
+            );
             await keyContext.kv.put(
               keyContext.storageKey,
               JSON.stringify({
                 remaining: keyContext.record.remaining,
+                initialLimit: updatedPackageLimit,
                 devices: keyContext.record.devices,
+                carryoverApplied: Boolean(keyContext.record.carryoverApplied),
               })
             );
           } catch (kvWriteErr) {
@@ -640,10 +764,14 @@ export default {
           responseHeaders["x-remaining-requests"] = String(updatedRemaining);
           result.remainingRequests = updatedRemaining;
         }
+        if (typeof updatedPackageLimit === "number") {
+          result.packageLimit = updatedPackageLimit;
+        }
 
         result._quota = {
           isMaster,
           remainingRequests: updatedRemaining,
+          packageLimit: updatedPackageLimit,
           storageMode,
         };
 
