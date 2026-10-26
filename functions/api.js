@@ -22,41 +22,149 @@ function parseAllowedKeys(raw) {
 }
 
 function getKvNamespace(env) {
-  if (!env || typeof env !== "object") return null;
-  const candidate =
-    env.USERS_KV ||
-    env.KEYS_KV ||
-    env.QUOTA_KV ||
-    env.AI_QUOTA_KV ||
-    env.KV ||
-    null;
   if (
-    candidate &&
-    typeof candidate.get === "function" &&
-    typeof candidate.put === "function"
+    env &&
+    env.USERS_KV &&
+    typeof env.USERS_KV.get === "function" &&
+    typeof env.USERS_KV.put === "function"
   ) {
-    return candidate;
+    return env.USERS_KV;
   }
   return null;
 }
 
 function parseKvRecord(rawText) {
-  if (!rawText) return null;
-  try {
-    const parsed = typeof rawText === "string" ? JSON.parse(rawText) : rawText;
-    if (parsed && typeof parsed === "object") {
-      const remaining =
-        typeof parsed.remaining === "number" && !Number.isNaN(parsed.remaining)
-          ? Math.max(0, Math.floor(parsed.remaining))
-          : PACKAGE_REQUESTS_LIMIT;
-      const devices = Array.isArray(parsed.devices)
-        ? parsed.devices.filter((d) => typeof d === "string" && d.trim().length > 0)
-        : [];
-      return { remaining, devices };
-    }
-  } catch {
-    // ignore malformed JSON
+  if (rawText === null || rawText === undefined) return null;
+
+  if (typeof rawText === "object" && !Array.isArray(rawText)) {
+    const rawRem =
+      rawText.remaining ?? rawText.limit ?? rawText.balance ?? rawText.requests;
+    const remaining =
+      typeof rawRem === "number" && !Number.isNaN(rawRem)
+        ? Math.max(0, Math.floor(rawRem))
+        : typeof rawRem === "string" && /^\d+$/.test(rawRem.trim())
+        ? Math.max(0, parseInt(rawRem.trim(), 10))
+        : PACKAGE_REQUESTS_LIMIT;
+    const devices = Array.isArray(rawText.devices)
+      ? rawText.devices.filter((d) => typeof d === "string" && d.trim().length > 0)
+      : [];
+    return {
+      remaining,
+      devices,
+      needsNormalization: !(
+        typeof rawText.remaining === "number" && Array.isArray(rawText.devices)
+      ),
+    };
   }
+
+  if (typeof rawText === "number" && !Number.isNaN(rawText)) {
+    return {
+      remaining: Math.max(0, Math.floor(rawText)),
+      devices: [],
+      needsNormalization: true,
+    };
+  }
+
+  const text = String(rawText).trim();
+
+  if (text.length > 0) {
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const rawRem =
+          parsed.remaining ?? parsed.limit ?? parsed.balance ?? parsed.requests;
+        const remaining =
+          typeof rawRem === "number" && !Number.isNaN(rawRem)
+            ? Math.max(0, Math.floor(rawRem))
+            : typeof rawRem === "string" && /^\d+$/.test(rawRem.trim())
+            ? Math.max(0, parseInt(rawRem.trim(), 10))
+            : PACKAGE_REQUESTS_LIMIT;
+        const devices = Array.isArray(parsed.devices)
+          ? parsed.devices.filter(
+              (d) => typeof d === "string" && d.trim().length > 0
+            )
+          : [];
+        return {
+          remaining,
+          devices,
+          needsNormalization: !(
+            typeof parsed.remaining === "number" &&
+            Array.isArray(parsed.devices)
+          ),
+        };
+      }
+      if (typeof parsed === "number" && !Number.isNaN(parsed)) {
+        return {
+          remaining: Math.max(0, Math.floor(parsed)),
+          devices: [],
+          needsNormalization: true,
+        };
+      }
+    } catch {
+      // plain text value
+    }
+  }
+
+  const numericMatch = text.match(/^(\d{1,6})(?:\s|$)/);
+  if (numericMatch) {
+    return {
+      remaining: Math.max(0, parseInt(numericMatch[1], 10)),
+      devices: [],
+      needsNormalization: true,
+    };
+  }
+
+  return {
+    remaining: PACKAGE_REQUESTS_LIMIT,
+    devices: [],
+    needsNormalization: true,
+  };
+}
+
+async function findKeyInUsersKv(kv, cleanKey) {
+  if (!kv || !cleanKey) return null;
+
+  let rawExisting = await kv.get(cleanKey);
+  if (rawExisting !== null && rawExisting !== undefined) {
+    return { storageKey: cleanKey, rawExisting };
+  }
+
+  const upperKey = cleanKey.toUpperCase();
+  if (upperKey !== cleanKey) {
+    rawExisting = await kv.get(upperKey);
+    if (rawExisting !== null && rawExisting !== undefined) {
+      return { storageKey: upperKey, rawExisting };
+    }
+  }
+
+  const lowerKey = cleanKey.toLowerCase();
+  if (lowerKey !== cleanKey) {
+    rawExisting = await kv.get(lowerKey);
+    if (rawExisting !== null && rawExisting !== undefined) {
+      return { storageKey: lowerKey, rawExisting };
+    }
+  }
+
+  if (typeof kv.list === "function") {
+    try {
+      const listResult = await kv.list({ limit: 1000 });
+      const keys = Array.isArray(listResult?.keys) ? listResult.keys : [];
+      const matchedEntry = keys.find(
+        (item) =>
+          typeof item?.name === "string" &&
+          item.name.trim().toLowerCase() === lowerKey
+      );
+      if (matchedEntry && matchedEntry.name) {
+        rawExisting = await kv.get(matchedEntry.name);
+        if (rawExisting !== null && rawExisting !== undefined) {
+          return { storageKey: matchedEntry.name, rawExisting };
+        }
+      }
+    } catch {
+      // ignore list error
+    }
+  }
+
   return null;
 }
 
@@ -129,17 +237,19 @@ async function verifyAndLoadKeyState({
   const allowedKeysRaw =
     typeof env?.ALLOWED_KEYS === "string" ? env.ALLOWED_KEYS : "";
   const allowedKeys = parseAllowedKeys(allowedKeysRaw);
-  const isInAllowedKeys = allowedKeys.includes(cleanKey);
+  const isInAllowedKeys = allowedKeys.some(
+    (k) => k.toLowerCase() === cleanKey.toLowerCase()
+  );
 
   const kv = getKvNamespace(env);
 
-  // 2. Сначала ищем ключ как запись в базе env.USERS_KV
+  // 2. Сначала ищем ключ как запись в базе env.USERS_KV (f88a2d8d574b41f59e6db567479fb7db)
   if (kv) {
     try {
-      const storageKey = cleanKey;
-      const rawExisting = await kv.get(storageKey);
-      let record = parseKvRecord(rawExisting);
-      let needsSave = false;
+      const found = await findKeyInUsersKv(kv, cleanKey);
+      let storageKey = found ? found.storageKey : cleanKey;
+      let record = found ? parseKvRecord(found.rawExisting) : null;
+      let needsSave = Boolean(record && record.needsNormalization);
 
       // Если записи в USERS_KV ещё нет — проверяем, есть ли этот ключ в списке env.ALLOWED_KEYS
       if (!record) {
@@ -147,6 +257,7 @@ async function verifyAndLoadKeyState({
           record = {
             remaining: PACKAGE_REQUESTS_LIMIT,
             devices: [],
+            needsNormalization: false,
           };
           needsSave = true;
         } else {

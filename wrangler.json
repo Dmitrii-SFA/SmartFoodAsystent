@@ -3,6 +3,12 @@
   "main": "worker.js",
   "compatibility_date": "2025-02-01",
   "keep_vars": true,
+  "kv_namespaces": [
+    {
+      "binding": "USERS_KV",
+      "id": "f88a2d8d574b41f59e6db567479fb7db"
+    }
+  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

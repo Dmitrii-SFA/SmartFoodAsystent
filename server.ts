@@ -1164,7 +1164,9 @@ function verifyServerKeyState(accessKey: string, deviceId: string): {
   }
 
   const allowedKeys = parseAllowedKeysFromEnv();
-  if (allowedKeys.length > 0 && !allowedKeys.includes(cleanKey)) {
+  const isInAllowedKeys = allowedKeys.some((k) => k.toLowerCase() === cleanKey.toLowerCase());
+
+  if (allowedKeys.length > 0 && !isInAllowedKeys) {
     return {
       ok: false,
       status: 403,
@@ -1173,7 +1175,6 @@ function verifyServerKeyState(accessKey: string, deviceId: string): {
     };
   }
 
-  // If ALLOWED_KEYS is configured on the server, track 500-request package & 2-device limit in serverKeyStore
   if (allowedKeys.length > 0) {
     let record = serverKeyStore.get(cleanKey);
     if (!record) {
@@ -1220,7 +1221,6 @@ function verifyServerKeyState(accessKey: string, deviceId: string): {
     };
   }
 
-  // Fallback when server storage / ALLOWED_KEYS is not yet configured: do not crash, let client track 500 balance
   let fallbackRecord = serverKeyStore.get(cleanKey);
   if (!fallbackRecord) {
     fallbackRecord = {
@@ -1266,7 +1266,7 @@ app.post(['/api', '/api/verify-key'], async (req: Request, res: Response) => {
     const apiKey = process.env.GEMINI_API_KEY;
     const hasLocalKeyConfig = Boolean(process.env.MASTER_KEY || process.env.ALLOWED_KEYS);
 
-    // If MASTER_KEY / ALLOWED_KEYS are configured in Cloudflare Worker rather than local .env,
+    // If MASTER_KEY / USERS_KV are configured in Cloudflare Worker rather than local .env,
     // proxy key verification and keyed requests to the Cloudflare Worker (with local fallback if unreachable)
     if ((!apiKey && !hasLocalKeyConfig) || (accessKey && !hasLocalKeyConfig)) {
       try {
