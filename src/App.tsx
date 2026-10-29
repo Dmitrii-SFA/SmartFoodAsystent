@@ -12,12 +12,14 @@ import {
   ensureEntireConfigProtected,
   translateConfigItems,
   getInitialDayLog,
+  translateInitialDayLogs,
 } from './config/defaultConfig';
 import { getThemeStyles } from './utils/themeHelper';
 import { getWaterProductName, getUITranslations } from './utils/translations';
 import { TopNavigation } from './components/TopNavigation';
 import { DaySwipeHeader } from './components/DaySwipeHeader';
 import { PersonSwitcherBar } from './components/PersonSwitcherBar';
+import { PWAInstallButton } from './components/PWAInstallButton';
 import { CompactNutrientsList } from './components/CompactNutrientsList';
 import { HeroSummary } from './components/HeroSummary';
 import { ReorderableMealTimeline } from './components/ReorderableMealTimeline';
@@ -112,8 +114,8 @@ export default function App() {
         let parsed = JSON.parse(saved);
         parsed = ensureEntireConfigProtected(parsed);
 
-        // Repair active language if it is a protected default (ru, en, pl)
-        const activeCode = (parsed.language?.code || 'ru').slice(0, 2).toLowerCase();
+        // Repair active language if it is a protected default (en, ru, pl)
+        const activeCode = (parsed.language?.code || 'en').slice(0, 2).toLowerCase();
         const protectedLang = DEFAULT_INSTALLED_LANGUAGES.find((l) => l.code === activeCode);
         if (protectedLang) {
           parsed.language = {
@@ -146,20 +148,21 @@ export default function App() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_LOGS);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return translateInitialDayLogs(parsed, config.language?.code || 'en');
       }
     } catch (e) {
       console.warn('Failed to parse saved day logs', e);
     }
     const today = getTodayStr();
     return {
-      [today]: getInitialDayLog(today),
+      [today]: getInitialDayLog(today, config.language?.code || 'en'),
     };
   });
 
   // Multi-person profiles state (each person has their own logs, metrics, and mealCategories)
-  const getDefaultPersonName = (langCode: string = 'ru') => {
-    const c = (langCode || 'ru').toLowerCase();
+  const getDefaultPersonName = (langCode: string = 'en') => {
+    const c = (langCode || 'en').toLowerCase();
     if (c.startsWith('en')) return 'Me';
     if (c.startsWith('pl')) return 'Ja';
     return 'Я';
@@ -293,12 +296,12 @@ export default function App() {
     if (!trimmed) return;
 
     const today = getTodayStr();
-    const activeCode = (config.language?.code || 'ru').slice(0, 2).toLowerCase();
+    const activeCode = (config.language?.code || 'en').slice(0, 2).toLowerCase();
     const freshDefaults = translateConfigItems(DEFAULT_USER_CONFIG, activeCode);
     const freshMetrics = ensureProtectedMetrics(freshDefaults.metrics);
     const freshMealCategories = ensureProtectedMealCategories(freshDefaults.mealCategories);
     const freshLogs: Record<string, DayLog> = {
-      [today]: getInitialDayLog(today),
+      [today]: getInitialDayLog(today, activeCode),
     };
 
     const newPerson: PersonProfile = {
@@ -376,14 +379,63 @@ export default function App() {
     }
   }, [activeTab]);
 
-  // Food Library state (Water in 3 languages + English default products for the 2 default recipes)
+  // Food Library state (Localized in EN, RU, PL for default products and recipes)
   const STORAGE_KEY_LIBRARY = 'pwa_calorie_food_library_v2';
-  const buildDefaultLibrary = (langCode: string = 'ru'): LibraryFoodItem[] => {
-    const waterName = getWaterProductName(langCode);
+
+  const PRESET_PRODUCT_TRANSLATIONS: Record<string, Record<string, string>> = {
+    en: {
+      'lib-6': 'Oat Flakes',
+      'lib-5': 'Chicken Egg',
+      'lib-3': 'Cottage Cheese 5%',
+      'lib-7': 'Beef Brisket',
+      'lib-8': 'Raw Potato',
+      'lib-9': 'White Cabbage',
+      'lib-10': 'Fresh Beetroot',
+      'lib-11': 'Fresh Carrot',
+      'lib-12': 'Yellow Onion',
+      'lib-13': 'Sunflower Oil',
+    },
+    ru: {
+      'lib-6': 'Овсяные хлопья',
+      'lib-5': 'Яйцо куриное',
+      'lib-3': 'Творог 5%',
+      'lib-7': 'Говяжья грудинка',
+      'lib-8': 'Картофель сырой',
+      'lib-9': 'Капуста белокочанная',
+      'lib-10': 'Свёкла свежая',
+      'lib-11': 'Морковь свежая',
+      'lib-12': 'Лук репчатый',
+      'lib-13': 'Масло подсолнечное',
+    },
+    pl: {
+      'lib-6': 'Płatki owsiane',
+      'lib-5': 'Jajko kurze',
+      'lib-3': 'Twaróg 5%',
+      'lib-7': 'Mostek wołowy',
+      'lib-8': 'Ziemniaki surowe',
+      'lib-9': 'Kapusta biała',
+      'lib-10': 'Burak świeży',
+      'lib-11': 'Marchew świeża',
+      'lib-12': 'Cebula żółta',
+      'lib-13': 'Olej słonecznikowy',
+    },
+  };
+
+  const getPresetProductNames = (langCode: string = 'en'): Record<string, string> => {
+    const c = (langCode || 'en').slice(0, 2).toLowerCase();
+    const dict = PRESET_PRODUCT_TRANSLATIONS[c] || PRESET_PRODUCT_TRANSLATIONS.en;
+    return {
+      ...dict,
+      'lib-water': getWaterProductName(langCode),
+    };
+  };
+
+  const buildDefaultLibrary = (langCode: string = 'en'): LibraryFoodItem[] => {
+    const pNames = getPresetProductNames(langCode);
     return [
       {
         id: 'lib-water',
-        name: waterName,
+        name: pNames['lib-water'],
         servingSizeGrams: 100,
         nutrients: {
           calories: 0,
@@ -407,7 +459,7 @@ export default function App() {
       // Simple Recipe Ingredients (Oatmeal Pancake with Cottage Cheese)
       {
         id: 'lib-6',
-        name: 'Oat Flakes',
+        name: pNames['lib-6'],
         servingSizeGrams: 100,
         nutrients: { calories: 352, proteins: 12.5, fats: 6.2, carbs: 61, fiber: 10, iron: 4.3 },
         createdAt: Date.now(),
@@ -415,7 +467,7 @@ export default function App() {
       },
       {
         id: 'lib-5',
-        name: 'Chicken Egg',
+        name: pNames['lib-5'],
         servingSizeGrams: 100,
         nutrients: { calories: 143, proteins: 12.7, fats: 10.2, carbs: 0.7, vitaminD: 1.8, iron: 1.8 },
         createdAt: Date.now(),
@@ -423,16 +475,16 @@ export default function App() {
       },
       {
         id: 'lib-3',
-        name: 'Cottage Cheese 5%',
+        name: pNames['lib-3'],
         servingSizeGrams: 100,
         nutrients: { calories: 121, proteins: 17, fats: 5, carbs: 3, calcium: 160 },
         createdAt: Date.now(),
         source: 'preset',
       },
-      // Full Cooking Borscht Ingredients (Classic Beef Borscht)
+      // Full Cooking Borscht Ingredients
       {
         id: 'lib-7',
-        name: 'Beef Brisket',
+        name: pNames['lib-7'],
         servingSizeGrams: 100,
         nutrients: { calories: 218, proteins: 19.5, fats: 15.2, carbs: 0, iron: 2.7, potassium: 318 },
         createdAt: Date.now(),
@@ -440,7 +492,7 @@ export default function App() {
       },
       {
         id: 'lib-8',
-        name: 'Raw Potato',
+        name: pNames['lib-8'],
         servingSizeGrams: 100,
         nutrients: { calories: 77, proteins: 2.0, fats: 0.1, carbs: 16.3, fiber: 1.4, potassium: 421, vitaminC: 20 },
         createdAt: Date.now(),
@@ -448,7 +500,7 @@ export default function App() {
       },
       {
         id: 'lib-9',
-        name: 'White Cabbage',
+        name: pNames['lib-9'],
         servingSizeGrams: 100,
         nutrients: { calories: 27, proteins: 1.8, fats: 0.1, carbs: 4.7, fiber: 2.0, vitaminC: 36, calcium: 40 },
         createdAt: Date.now(),
@@ -456,7 +508,7 @@ export default function App() {
       },
       {
         id: 'lib-10',
-        name: 'Fresh Beetroot',
+        name: pNames['lib-10'],
         servingSizeGrams: 100,
         nutrients: { calories: 43, proteins: 1.5, fats: 0.1, carbs: 8.8, fiber: 2.8, potassium: 325, iron: 0.8 },
         createdAt: Date.now(),
@@ -464,7 +516,7 @@ export default function App() {
       },
       {
         id: 'lib-11',
-        name: 'Fresh Carrot',
+        name: pNames['lib-11'],
         servingSizeGrams: 100,
         nutrients: { calories: 35, proteins: 1.3, fats: 0.1, carbs: 6.9, fiber: 2.4, potassium: 200 },
         createdAt: Date.now(),
@@ -472,7 +524,7 @@ export default function App() {
       },
       {
         id: 'lib-12',
-        name: 'Yellow Onion',
+        name: pNames['lib-12'],
         servingSizeGrams: 100,
         nutrients: { calories: 41, proteins: 1.4, fats: 0.2, carbs: 8.2, fiber: 3.0, potassium: 175 },
         createdAt: Date.now(),
@@ -480,7 +532,7 @@ export default function App() {
       },
       {
         id: 'lib-13',
-        name: 'Sunflower Oil',
+        name: pNames['lib-13'],
         servingSizeGrams: 100,
         nutrients: { calories: 884, proteins: 0, fats: 99.9, carbs: 0 },
         createdAt: Date.now(),
@@ -544,6 +596,8 @@ export default function App() {
       Object.values(mapObj).forEach((dayLog) => {
         if (!dayLog || !Array.isArray(dayLog.items)) return;
         dayLog.items.forEach((loggedItem) => {
+          // Do not duplicate the 4 sample initial day log items into the library on every language switch
+          if (loggedItem?.id && loggedItem.id.startsWith('init-')) return;
           const cleanName = (loggedItem?.name || '').trim();
           if (!cleanName) return;
           const lower = cleanName.toLowerCase();
@@ -563,8 +617,8 @@ export default function App() {
   };
 
   const [library, setLibrary] = useState<LibraryFoodItem[]>(() => {
-    const activeLangCode = config.language?.code || 'ru';
-    const waterName = getWaterProductName(activeLangCode);
+    const activeLangCode = config.language?.code || 'en';
+    const presetNames = getPresetProductNames(activeLangCode);
     let baseList: LibraryFoodItem[] = [];
 
     try {
@@ -573,7 +627,7 @@ export default function App() {
         const parsed: LibraryFoodItem[] = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           baseList = parsed.map(({ photoUrl, ...f }) =>
-            f.id === 'lib-water' ? { ...f, name: waterName } : f
+            presetNames[f.id] ? { ...f, name: presetNames[f.id] } : f
           );
         }
       }
@@ -636,33 +690,109 @@ export default function App() {
     return baseList;
   });
 
-  // Recipes state (2 default recipes in English: 1 simple list + 1 full cooking Borscht)
+  // Recipes state (2 default recipes localized in EN, RU, PL; Borscht uses 2 separate frying pans)
   const STORAGE_KEY_RECIPES = 'pwa_calorie_recipes_v2';
-  const buildDefaultRecipes = (langCode: string = 'ru'): RecipeItem[] => {
-    const waterName = getWaterProductName(langCode);
+  const buildDefaultRecipes = (langCode: string = 'en'): RecipeItem[] => {
+    const c = (langCode || 'en').slice(0, 2).toLowerCase();
+    const isRu = c === 'ru';
+    const isPl = c === 'pl';
+    const pNames = getPresetProductNames(langCode);
+
+    const oatRecipeName = isRu
+      ? 'Овсяноблин с творогом'
+      : isPl
+      ? 'Omlet owsiany z twarogiem'
+      : 'Oatmeal Pancake with Cottage Cheese';
+
+    const borschtRecipeName = isRu
+      ? 'Классический борщ с говядиной'
+      : isPl
+      ? 'Barszcz ukraiński'
+      : 'Classic Beef Borscht';
+
+    const potVesselName = isRu
+      ? 'Кастрюля 4 л (Бульон и основа)'
+      : isPl
+      ? 'Garnek 4L (Bulion i baza)'
+      : 'Pot 4L (Broth & Base)';
+
+    const pan1VesselName = isRu
+      ? 'Сковорода №1 (Лук и морковь)'
+      : isPl
+      ? 'Patelnia nr 1 (Cebula i marchew)'
+      : 'Frying Pan #1 (Onion & Carrot)';
+
+    const pan2VesselName = isRu
+      ? 'Сковорода №2 (Свёкла)'
+      : isPl
+      ? 'Patelnia nr 2 (Buraki)'
+      : 'Frying Pan #2 (Beetroot)';
+
+    const transferPan1Name = isRu
+      ? `Содержимое: ${pan1VesselName}`
+      : isPl
+      ? `Zawartość: ${pan1VesselName}`
+      : `Contents: ${pan1VesselName}`;
+
+    const transferPan2Name = isRu
+      ? `Содержимое: ${pan2VesselName}`
+      : isPl
+      ? `Zawartość: ${pan2VesselName}`
+      : `Contents: ${pan2VesselName}`;
+
+    const regimeSimmer5Name = isRu
+      ? 'Тушение под крышкой (уровень 5/9)'
+      : isPl
+      ? 'Duszenie pod przykryciem (poziom 5/9)'
+      : 'Simmer under lid (level 5/9)';
+
+    const regimeSimmer3Name = isRu
+      ? 'Томление под крышкой (уровень 3/9)'
+      : isPl
+      ? 'Wolne duszenie pod przykryciem (poziom 3/9)'
+      : 'Gentle simmer under lid (level 3/9)';
+
+    const aiNote = isRu
+      ? 'Насыщенный говяжий бульон томится на медленном огне (3/9). Лук и морковь обжариваются на первой сковороде, а свёкла готовится отдельно на второй сковороде: 2 мин на сильном огне (9/9), затем 7 мин под крышкой на среднем (5/9) и ещё 7 мин под крышкой на слабом огне (3/9).'
+      : isPl
+      ? 'Bogaty bulion wołowy gotowany na wolnym ogniu (3/9). Cebula i marchew smażone na pierwszej patelni, a buraki osobno na drugiej patelni: 2 min na dużym ogniu (9/9), następnie 7 min pod przykryciem na poziomie 5/9 i kolejne 7 min pod przykryciem na poziomie 3/9.'
+      : 'Rich beef broth simmered gently (level 3/9). Onion and carrot are sautéed in Frying Pan #1, while beetroot is cooked separately in Frying Pan #2: 2 min sear on high heat (9/9), then 7 min covered at level 5/9, and 7 more min covered at level 3/9.';
+
+    const aiImpact = isRu
+      ? 'Отдельное томление свёклы под крышкой в два этапа сохраняет бетанин и насыщенный рубиновый цвет, а бета-каротин из моркови переходит в липидную фракцию масла.'
+      : isPl
+      ? 'Osobne duszenie buraków pod przykryciem w dwóch etapach zachowuje betaninę i głęboki rubinowy kolor, a beta-karoten z marchwi rozpuszcza się w tłuszczu.'
+      : 'Separate two-stage covered simmering of beetroot preserves betanin and deep ruby color, while beta-carotene from carrots dissolves into the lipid fraction for optimal absorption.';
+
+    const aiTips = isRu
+      ? 'После выключения плиты дайте борщу настояться под крышкой 20 минут для объединения вкусов.'
+      : isPl
+      ? 'Po wyłączeniu kuchenki odstaw barszcz ukraiński pod przykryciem na 20 minut, aby smaki się przegryzły.'
+      : 'Let the borscht rest covered for 20 minutes after turning off the stove to balance the flavors.';
+
     return [
       {
         id: 'rec-oat-pancake',
-        name: 'Oatmeal Pancake with Cottage Cheese',
+        name: oatRecipeName,
         totalGrams: 160,
         rawGrams: 160,
         isDetailedCooking: false,
         ingredients: [
           {
             foodId: 'lib-6',
-            foodName: 'Oat Flakes',
+            foodName: pNames['lib-6'],
             grams: 50,
             nutrientsPer100g: { calories: 352, proteins: 12.5, fats: 6.2, carbs: 61 },
           },
           {
             foodId: 'lib-5',
-            foodName: 'Chicken Egg',
+            foodName: pNames['lib-5'],
             grams: 60,
             nutrientsPer100g: { calories: 143, proteins: 12.7, fats: 10.2, carbs: 0.7 },
           },
           {
             foodId: 'lib-3',
-            foodName: 'Cottage Cheese 5%',
+            foodName: pNames['lib-3'],
             grams: 50,
             nutrientsPer100g: { calories: 121, proteins: 17, fats: 5, carbs: 3 },
           },
@@ -673,19 +803,19 @@ export default function App() {
       },
       {
         id: 'rec-borscht-en',
-        name: 'Classic Beef Borscht',
+        name: borschtRecipeName,
         totalGrams: 3340,
         rawGrams: 3820,
         isDetailedCooking: true,
         ingredients: [
-          { foodId: 'lib-water', foodName: waterName, grams: 2000, nutrientsPer100g: { calories: 0, proteins: 0, fats: 0, carbs: 0 } },
-          { foodId: 'lib-7', foodName: 'Beef Brisket', grams: 600, nutrientsPer100g: { calories: 218, proteins: 19.5, fats: 15.2, carbs: 0 } },
-          { foodId: 'lib-8', foodName: 'Raw Potato', grams: 350, nutrientsPer100g: { calories: 77, proteins: 2.0, fats: 0.1, carbs: 16.3 } },
-          { foodId: 'lib-9', foodName: 'White Cabbage', grams: 300, nutrientsPer100g: { calories: 27, proteins: 1.8, fats: 0.1, carbs: 4.7 } },
-          { foodId: 'lib-10', foodName: 'Fresh Beetroot', grams: 250, nutrientsPer100g: { calories: 43, proteins: 1.5, fats: 0.1, carbs: 8.8 } },
-          { foodId: 'lib-11', foodName: 'Fresh Carrot', grams: 150, nutrientsPer100g: { calories: 35, proteins: 1.3, fats: 0.1, carbs: 6.9 } },
-          { foodId: 'lib-12', foodName: 'Yellow Onion', grams: 150, nutrientsPer100g: { calories: 41, proteins: 1.4, fats: 0.2, carbs: 8.2 } },
-          { foodId: 'lib-13', foodName: 'Sunflower Oil', grams: 20, nutrientsPer100g: { calories: 884, proteins: 0, fats: 99.9, carbs: 0 } },
+          { foodId: 'lib-water', foodName: pNames['lib-water'], grams: 2000, nutrientsPer100g: { calories: 0, proteins: 0, fats: 0, carbs: 0 } },
+          { foodId: 'lib-7', foodName: pNames['lib-7'], grams: 600, nutrientsPer100g: { calories: 218, proteins: 19.5, fats: 15.2, carbs: 0 } },
+          { foodId: 'lib-8', foodName: pNames['lib-8'], grams: 350, nutrientsPer100g: { calories: 77, proteins: 2.0, fats: 0.1, carbs: 16.3 } },
+          { foodId: 'lib-9', foodName: pNames['lib-9'], grams: 300, nutrientsPer100g: { calories: 27, proteins: 1.8, fats: 0.1, carbs: 4.7 } },
+          { foodId: 'lib-10', foodName: pNames['lib-10'], grams: 250, nutrientsPer100g: { calories: 43, proteins: 1.5, fats: 0.1, carbs: 8.8 } },
+          { foodId: 'lib-11', foodName: pNames['lib-11'], grams: 150, nutrientsPer100g: { calories: 35, proteins: 1.3, fats: 0.1, carbs: 6.9 } },
+          { foodId: 'lib-12', foodName: pNames['lib-12'], grams: 150, nutrientsPer100g: { calories: 41, proteins: 1.4, fats: 0.2, carbs: 8.2 } },
+          { foodId: 'lib-13', foodName: pNames['lib-13'], grams: 20, nutrientsPer100g: { calories: 884, proteins: 0, fats: 99.9, carbs: 0 } },
         ],
         totalNutrients: { calories: 2055, proteins: 137, fats: 114, carbs: 104 },
         nutrientsPer100g: { calories: 61.5, proteins: 4.1, fats: 3.4, carbs: 3.1 },
@@ -698,42 +828,61 @@ export default function App() {
           vessels: [
             {
               id: 'vessel-pot-1',
-              name: 'Pot 4L (Broth & Base)',
+              name: potVesselName,
               icon: 'pot',
               type: 'pot',
               heatSource: 'electric',
               electricLevel: 3,
+              hasLid: true,
               waterAddedMl: 0,
               startOffsetMinutes: 0,
               stepItems: [
-                { id: 'step-water-1', foodId: 'lib-water', foodName: waterName, grams: 2000, addedAtMinute: 0, durationMinutes: 90, cumulativeDurationMinutes: 125, isExtracted: false },
-                { id: 'step-1', foodId: 'lib-7', foodName: 'Beef Brisket', grams: 600, addedAtMinute: 0, durationMinutes: 90, cumulativeDurationMinutes: 125, isExtracted: false },
-                { id: 'step-2', foodId: 'lib-8', foodName: 'Raw Potato', grams: 350, addedAtMinute: 90, durationMinutes: 20, cumulativeDurationMinutes: 35, isExtracted: false },
-                { id: 'step-3', foodId: 'lib-9', foodName: 'White Cabbage', grams: 300, addedAtMinute: 110, durationMinutes: 15, cumulativeDurationMinutes: 15, isExtracted: false },
-                { id: 'step-4-transfer', foodId: 'vessel-transfer:vessel-pan-1', foodName: 'Contents: Frying Pan 28cm (Sautéed Vegetables)', grams: 471, addedAtMinute: 110, durationMinutes: 15, cumulativeDurationMinutes: 15, sourceVesselId: 'vessel-pan-1', isExtracted: false },
+                { id: 'step-water-1', foodId: 'lib-water', foodName: pNames['lib-water'], grams: 2000, addedAtMinute: 0, durationMinutes: 90, cumulativeDurationMinutes: 125, isExtracted: false },
+                { id: 'step-1', foodId: 'lib-7', foodName: pNames['lib-7'], grams: 600, addedAtMinute: 0, durationMinutes: 90, cumulativeDurationMinutes: 125, isExtracted: false },
+                { id: 'step-2', foodId: 'lib-8', foodName: pNames['lib-8'], grams: 350, addedAtMinute: 90, durationMinutes: 20, cumulativeDurationMinutes: 35, isExtracted: false },
+                { id: 'step-3', foodId: 'lib-9', foodName: pNames['lib-9'], grams: 300, addedAtMinute: 110, durationMinutes: 15, cumulativeDurationMinutes: 15, isExtracted: false },
+                { id: 'step-4-transfer-pan1', foodId: 'vessel-transfer:vessel-pan-1', foodName: transferPan1Name, grams: 285, addedAtMinute: 110, durationMinutes: 15, cumulativeDurationMinutes: 15, sourceVesselId: 'vessel-pan-1', isExtracted: false },
+                { id: 'step-5-transfer-pan2', foodId: 'vessel-transfer:vessel-pan-2', foodName: transferPan2Name, grams: 235, addedAtMinute: 110, durationMinutes: 15, cumulativeDurationMinutes: 15, sourceVesselId: 'vessel-pan-2', isExtracted: false },
               ],
             },
             {
               id: 'vessel-pan-1',
-              name: 'Frying Pan 28cm (Sautéed Vegetables)',
+              name: pan1VesselName,
               icon: 'pan_classic',
               type: 'pan',
               heatSource: 'electric',
               electricLevel: 9,
+              hasLid: false,
               waterAddedMl: 0,
               startOffsetMinutes: 90,
               stepItems: [
-                { id: 'step-pan-1', foodId: 'lib-12', foodName: 'Yellow Onion', grams: 150, addedAtMinute: 0, durationMinutes: 5, cumulativeDurationMinutes: 5, isExtracted: false },
-                { id: 'step-pan-2', foodId: 'lib-11', foodName: 'Fresh Carrot', grams: 150, addedAtMinute: 0, durationMinutes: 5, cumulativeDurationMinutes: 5, isExtracted: false },
-                { id: 'step-pan-3', foodId: 'lib-10', foodName: 'Fresh Beetroot', grams: 250, addedAtMinute: 0, durationMinutes: 5, cumulativeDurationMinutes: 5, isExtracted: false },
-                { id: 'step-pan-4', foodId: 'lib-13', foodName: 'Sunflower Oil', grams: 20, addedAtMinute: 0, durationMinutes: 5, cumulativeDurationMinutes: 5, isExtracted: false },
+                { id: 'step-pan1-1', foodId: 'lib-12', foodName: pNames['lib-12'], grams: 150, addedAtMinute: 0, durationMinutes: 5, cumulativeDurationMinutes: 5, stepHeatSource: 'electric', stepElectricLevel: 9, stepHasLid: false, isExtracted: false },
+                { id: 'step-pan1-2', foodId: 'lib-11', foodName: pNames['lib-11'], grams: 150, addedAtMinute: 0, durationMinutes: 5, cumulativeDurationMinutes: 5, stepHeatSource: 'electric', stepElectricLevel: 9, stepHasLid: false, isExtracted: false },
+                { id: 'step-pan1-3', foodId: 'lib-13', foodName: pNames['lib-13'], grams: 10, addedAtMinute: 0, durationMinutes: 5, cumulativeDurationMinutes: 5, stepHeatSource: 'electric', stepElectricLevel: 9, stepHasLid: false, isExtracted: false },
+              ],
+            },
+            {
+              id: 'vessel-pan-2',
+              name: pan2VesselName,
+              icon: 'pan_deep',
+              type: 'pan',
+              heatSource: 'electric',
+              electricLevel: 9,
+              hasLid: false,
+              waterAddedMl: 0,
+              startOffsetMinutes: 90,
+              stepItems: [
+                { id: 'step-pan2-1', foodId: 'lib-10', foodName: pNames['lib-10'], grams: 250, addedAtMinute: 0, durationMinutes: 2, cumulativeDurationMinutes: 16, stepHeatSource: 'electric', stepElectricLevel: 9, stepHasLid: false, isExtracted: false },
+                { id: 'step-pan2-2', foodId: 'lib-13', foodName: pNames['lib-13'], grams: 10, addedAtMinute: 0, durationMinutes: 2, cumulativeDurationMinutes: 16, stepHeatSource: 'electric', stepElectricLevel: 9, stepHasLid: false, isExtracted: false },
+                { id: 'step-pan2-regime-1', foodId: 'step-regime-only', foodName: regimeSimmer5Name, grams: 0, addedAtMinute: 2, durationMinutes: 7, cumulativeDurationMinutes: 14, isRegimeOnly: true, stepHeatSource: 'electric', stepElectricLevel: 5, stepHasLid: true, isExtracted: false },
+                { id: 'step-pan2-regime-2', foodId: 'step-regime-only', foodName: regimeSimmer3Name, grams: 0, addedAtMinute: 9, durationMinutes: 7, cumulativeDurationMinutes: 7, isRegimeOnly: true, stepHeatSource: 'electric', stepElectricLevel: 3, stepHasLid: true, isExtracted: false },
               ],
             },
           ],
           aiAnalysis: {
-            note: 'Rich beef broth simmered gently (level 3/9) for collagen extraction. Vegetables sautéed in the pan from minute 90 to 95 and transferred to the pot at minute 110 with cabbage to preserve vibrant color and aroma.',
-            nutrientImpact: 'Beta-carotene from carrots dissolves into the oil lipid fraction for optimal absorption, while minerals enrich the broth.',
-            chefTips: 'Let the borscht rest covered for 20 minutes after turning off the stove to balance the flavors.',
+            note: aiNote,
+            nutrientImpact: aiImpact,
+            chefTips: aiTips,
             analyzedAt: Date.now(),
           },
         },
@@ -742,30 +891,51 @@ export default function App() {
     ];
   };
 
+  // Helper to translate default recipes and upgrade Borscht to the 2-pan beetroot process
+  const localizeRecipesForLanguage = (existingRecipes: RecipeItem[], langCode: string = 'en'): RecipeItem[] => {
+    const freshDefaults = buildDefaultRecipes(langCode);
+    const defaultMap = new Map(freshDefaults.map((r) => [r.id, r]));
+    const presetNames = getPresetProductNames(langCode);
+
+    return existingRecipes.map((rec) => {
+      // Replace built-in default recipes with their localized & updated version
+      if (defaultMap.has(rec.id)) {
+        const canonical = defaultMap.get(rec.id)!;
+        return {
+          ...canonical,
+          createdAt: rec.createdAt || canonical.createdAt,
+        };
+      }
+      // For custom user recipes, still translate any preset ingredient names
+      return {
+        ...rec,
+        ingredients: (rec.ingredients || []).map((ing) =>
+          presetNames[ing.foodId] ? { ...ing, foodName: presetNames[ing.foodId] } : ing
+        ),
+        cookingProcess: rec.cookingProcess
+          ? {
+              ...rec.cookingProcess,
+              vessels: (rec.cookingProcess.vessels || []).map((v) => ({
+                ...v,
+                stepItems: (v.stepItems || []).map((s) =>
+                  presetNames[s.foodId] ? { ...s, foodName: presetNames[s.foodId] } : s
+                ),
+              })),
+            }
+          : undefined,
+      };
+    });
+  };
+
   const [recipes, setRecipes] = useState<RecipeItem[]>(() => {
-    const activeLangCode = config.language?.code || 'ru';
-    const waterName = getWaterProductName(activeLangCode);
+    const activeLangCode = config.language?.code || 'en';
     try {
       const saved = localStorage.getItem(STORAGE_KEY_RECIPES);
       if (saved) {
         const parsed: RecipeItem[] = JSON.parse(saved);
-        return parsed.map((rec) => ({
-          ...rec,
-          ingredients: (rec.ingredients || []).map((ing) =>
-            ing.foodId === 'lib-water' ? { ...ing, foodName: waterName } : ing
-          ),
-          cookingProcess: rec.cookingProcess
-            ? {
-                ...rec.cookingProcess,
-                vessels: (rec.cookingProcess.vessels || []).map((v) => ({
-                  ...v,
-                  stepItems: (v.stepItems || []).map((s) =>
-                    s.foodId === 'lib-water' ? { ...s, foodName: waterName } : s
-                  ),
-                })),
-              }
-            : undefined,
-        }));
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return localizeRecipesForLanguage(parsed, activeLangCode);
+        }
       }
       // Preserve any custom user-created recipes from v1 if present
       const legacySaved = localStorage.getItem('pwa_calorie_recipes_v1');
@@ -886,7 +1056,7 @@ export default function App() {
     // Optionally reset logs and people profiles
     if (clearLogsToo) {
       const today = getTodayStr();
-      const freshLogs = { [today]: getInitialDayLog(today) };
+      const freshLogs = { [today]: getInitialDayLog(today, restoredConfig.language.code) };
       setLogs(freshLogs);
       const resetDefaultPerson: PersonProfile = {
         id: 'default',
@@ -1102,7 +1272,7 @@ export default function App() {
     // Use canonical protected labels if it's ru, en, or pl to fix any prior modifications
     const canonicalProtected = DEFAULT_INSTALLED_LANGUAGES.find((l) => l.code === code2);
     const targetLabels = canonicalProtected ? canonicalProtected.labels : lang.labels;
-    const waterName = getWaterProductName(code2);
+    const presetNames = getPresetProductNames(code2);
 
     setConfig((prev) => {
       const translated = translateConfigItems(prev, code2);
@@ -1122,30 +1292,27 @@ export default function App() {
       };
     });
 
-    // Update Water product name in 3 languages ("Вода", "Water", "Woda") in library and recipes
+    // Translate built-in default products in library
     setLibrary((prev) =>
       prev.map((item) =>
-        item.id === 'lib-water' ? { ...item, name: waterName } : item
+        presetNames[item.id] ? { ...item, name: presetNames[item.id] } : item
       )
     );
-    setRecipes((prev) =>
-      prev.map((rec) => ({
-        ...rec,
-        ingredients: (rec.ingredients || []).map((ing) =>
-          ing.foodId === 'lib-water' ? { ...ing, foodName: waterName } : ing
-        ),
-        cookingProcess: rec.cookingProcess
-          ? {
-              ...rec.cookingProcess,
-              vessels: (rec.cookingProcess.vessels || []).map((v) => ({
-                ...v,
-                stepItems: (v.stepItems || []).map((s) =>
-                  s.foodId === 'lib-water' ? { ...s, foodName: waterName } : s
-                ),
-              })),
-            }
-          : undefined,
-      }))
+
+    // Translate built-in default recipes & preset ingredients
+    setRecipes((prev) => localizeRecipesForLanguage(prev, code2));
+
+    // Translate built-in sample initial day log items and default person name
+    setLogs((prev) => translateInitialDayLogs(prev, code2));
+    setPeople((prev) =>
+      prev.map((p) => {
+        const isDefaultName = ['Me', 'Я', 'Ja'].includes(p.name);
+        return {
+          ...p,
+          name: p.id === 'default' && isDefaultName ? getDefaultPersonName(code2) : p.name,
+          logs: translateInitialDayLogs(p.logs || {}, code2),
+        };
+      })
     );
 
     setConfigToast({
@@ -1712,6 +1879,15 @@ export default function App() {
             }}
             className="space-y-4 animate-in fade-in duration-200"
           >
+            {/* 0. One-time Home Screen Install Banner (between top 5-button navigation and Day block) */}
+            <PWAInstallButton
+              variant="banner"
+              langCode={config.language.code}
+              accentColor={config.theme.accentColor}
+              themeStyles={themeStyles}
+              borderRadius={config.theme.borderRadius}
+            />
+
             {/* 1. Day of Week Swipe & Arrow Header + Square Add Person Button */}
             <DaySwipeHeader
               currentDateStr={currentDateStr}

@@ -12,24 +12,24 @@ export const DEFAULT_POLISH_LABELS = COMPLETE_POLISH_LABELS;
 
 export const DEFAULT_INSTALLED_LANGUAGES: LanguageOption[] = [
   {
-    code: 'ru',
-    name: 'Русский',
-    nativeName: 'Русский',
-    flag: '🇷🇺',
-    isProtected: true,
-    labels: DEFAULT_RUSSIAN_LABELS,
-  },
-  {
     code: 'en',
-    name: 'Английский',
+    name: 'English',
     nativeName: 'English',
     flag: '🇬🇧',
     isProtected: true,
     labels: DEFAULT_ENGLISH_LABELS,
   },
   {
+    code: 'ru',
+    name: 'Russian',
+    nativeName: 'Русский',
+    flag: '🇷🇺',
+    isProtected: true,
+    labels: DEFAULT_RUSSIAN_LABELS,
+  },
+  {
     code: 'pl',
-    name: 'Польский',
+    name: 'Polish',
     nativeName: 'Polski',
     flag: '🇵🇱',
     isProtected: true,
@@ -3218,13 +3218,13 @@ export function ensureEntireConfigProtected(userConfig: UserConfig): UserConfig 
   return safeConfig;
 }
 
-export const DEFAULT_USER_CONFIG: UserConfig = {
+const RAW_DEFAULT_USER_CONFIG: UserConfig = {
   version: 1,
-  userName: 'Дмитрий',
+  userName: 'Alex',
   goalMode: 'maintain',
   language: {
-    code: 'ru',
-    labels: DEFAULT_RUSSIAN_LABELS,
+    code: 'en',
+    labels: DEFAULT_ENGLISH_LABELS,
   },
   installedLanguages: DEFAULT_INSTALLED_LANGUAGES,
   theme: {
@@ -3243,28 +3243,28 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
   mealCategories: [
     {
       id: 'breakfast',
-      name: 'Завтрак',
+      name: 'Breakfast',
       icon: 'Coffee',
       targetCaloriesPercent: 25,
       isProtected: true,
     },
     {
       id: 'lunch',
-      name: 'Обед',
+      name: 'Lunch',
       icon: 'Utensils',
       targetCaloriesPercent: 35,
       isProtected: true,
     },
     {
       id: 'dinner',
-      name: 'Ужин',
+      name: 'Dinner',
       icon: 'Moon',
       targetCaloriesPercent: 25,
       isProtected: true,
     },
     {
       id: 'snack',
-      name: 'Перекус',
+      name: 'Snack',
       icon: 'Cookie',
       targetCaloriesPercent: 15,
       isProtected: true,
@@ -3279,6 +3279,14 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
     aiChatWidget: true,
     jsonConfigPreview: false,
   },
+};
+
+const translatedDefaultConfigItems = translateConfigItems(RAW_DEFAULT_USER_CONFIG, 'en');
+
+export const DEFAULT_USER_CONFIG: UserConfig = {
+  ...RAW_DEFAULT_USER_CONFIG,
+  metrics: translatedDefaultConfigItems.metrics,
+  mealCategories: translatedDefaultConfigItems.mealCategories,
 };
 
 export const PRESET_CONFIGS: Record<string, { title: string; description: string; config: Partial<UserConfig> }> = {
@@ -3356,7 +3364,52 @@ export const PRESET_CONFIGS: Record<string, { title: string; description: string
   },
 };
 
-export function getInitialDayLog(todayStr: string): DayLog {
+export const INITIAL_DAY_LOG_ITEM_NAMES: Record<string, Record<string, string>> = {
+  en: {
+    'init-1': 'Oatmeal with Milk and Berries',
+    'init-2': 'Boiled Eggs (2 pcs)',
+    'init-3': 'Grilled Chicken Breast with Buckwheat',
+    'init-4': 'Green Apple and Walnuts',
+  },
+  ru: {
+    'init-1': 'Овсяная каша на молоке с ягодами',
+    'init-2': 'Яйцо вареное (2 шт)',
+    'init-3': 'Куриное филе на гриле с гречкой',
+    'init-4': 'Зеленое яблоко и грецкие орехи',
+  },
+  pl: {
+    'init-1': 'Owsianka na mleku z owocami leśnymi',
+    'init-2': 'Jajka na twardo (2 szt.)',
+    'init-3': 'Grillowana pierś z kurczaka z kaszą gryczaną',
+    'init-4': 'Zielone jabłko i orzechy włoskie',
+  },
+};
+
+export function translateInitialDayLogs(
+  logs: Record<string, DayLog>,
+  langCode: string = 'en'
+): Record<string, DayLog> {
+  const c = (langCode || 'en').slice(0, 2).toLowerCase();
+  const map = INITIAL_DAY_LOG_ITEM_NAMES[c] || INITIAL_DAY_LOG_ITEM_NAMES.en;
+  const next: Record<string, DayLog> = {};
+  Object.entries(logs || {}).forEach(([dateKey, dayLog]) => {
+    if (!dayLog || !Array.isArray(dayLog.items)) {
+      next[dateKey] = dayLog;
+      return;
+    }
+    next[dateKey] = {
+      ...dayLog,
+      items: dayLog.items.map((item) =>
+        map[item.id] ? { ...item, name: map[item.id] } : item
+      ),
+    };
+  });
+  return next;
+}
+
+export function getInitialDayLog(todayStr: string, langCode: string = 'en'): DayLog {
+  const c = (langCode || 'en').slice(0, 2).toLowerCase();
+  const names = INITIAL_DAY_LOG_ITEM_NAMES[c] || INITIAL_DAY_LOG_ITEM_NAMES.en;
   return {
     date: todayStr,
     waterMl: 1250,
@@ -3364,7 +3417,7 @@ export function getInitialDayLog(todayStr: string): DayLog {
       {
         id: 'init-1',
         mealCategoryId: 'breakfast',
-        name: 'Овсяная каша на молоке с ягодами',
+        name: names['init-1'],
         amountGrams: 250,
         timestamp: Date.now() - 4 * 3600 * 1000,
         nutrients: {
@@ -3382,7 +3435,7 @@ export function getInitialDayLog(todayStr: string): DayLog {
       {
         id: 'init-2',
         mealCategoryId: 'breakfast',
-        name: 'Яйцо вареное (2 шт)',
+        name: names['init-2'],
         amountGrams: 110,
         timestamp: Date.now() - 4 * 3600 * 1000 + 1000,
         nutrients: {
@@ -3398,7 +3451,7 @@ export function getInitialDayLog(todayStr: string): DayLog {
       {
         id: 'init-3',
         mealCategoryId: 'lunch',
-        name: 'Куриное филе на гриле с гречкой',
+        name: names['init-3'],
         amountGrams: 320,
         timestamp: Date.now() - 2 * 3600 * 1000,
         nutrients: {
@@ -3414,7 +3467,7 @@ export function getInitialDayLog(todayStr: string): DayLog {
       {
         id: 'init-4',
         mealCategoryId: 'snack',
-        name: 'Зеленое яблоко и грецкие орехи',
+        name: names['init-4'],
         amountGrams: 180,
         timestamp: Date.now() - 1 * 3600 * 1000,
         nutrients: {

@@ -44,6 +44,9 @@ import {
   Smartphone,
   ChefHat,
   Bell,
+  MessageCircle,
+  Mail,
+  Send,
 } from 'lucide-react';
 import {
   SOUND_MELODIES,
@@ -63,7 +66,8 @@ export type SettingsSectionId =
   | 'theme'
   | 'soundSettings'
   | 'exportImport'
-  | 'dataReset';
+  | 'dataReset'
+  | 'feedback';
 
 interface SettingsTabProps {
   config: UserConfig;
@@ -212,6 +216,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     soundSettings: false,
     exportImport: false,
     dataReset: false,
+    feedback: true,
   });
 
   // Sound Settings state
@@ -1675,6 +1680,84 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                 <RotateCcw className="w-3.5 h-3.5 text-red-400 shrink-0" />
                 <span>{t.restoreOriginal}</span>
               </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 10. Обратная связь / Feedback (В самом низу меню настроек) */}
+      <div
+        className={`relative z-10 border ${themeStyles.borderColor} ${themeStyles.cardBg} ${radiusClass} p-4 sm:p-5 shadow-sm transition-all ${
+          openSections.feedback ? 'space-y-4' : 'space-y-0'
+        }`}
+      >
+        <div
+          onClick={() => toggleSection('feedback')}
+          className="flex items-start justify-between gap-3 cursor-pointer select-none group"
+        >
+          <div className="flex items-start gap-3 min-w-0 flex-1">
+            <div className="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0 mt-0.5">
+              <MessageCircle className="w-4 h-4" />
+            </div>
+            <div className="min-w-0 flex-1 space-y-1">
+              <h4
+                className={`text-sm sm:text-base font-bold leading-snug break-words ${themeStyles.textPrimary} group-hover:text-sky-400 transition-colors`}
+              >
+                {isEn ? 'Feedback & Support' : isPl ? 'Kontakt i opinie' : 'Обратная связь'}
+              </h4>
+              <p className="text-xs leading-relaxed text-slate-400 break-words">
+                {isEn
+                  ? 'Questions, suggestions, or support via Telegram and Email'
+                  : isPl
+                  ? 'Pytania, sugestie lub wsparcie przez Telegram i Email'
+                  : 'Вопросы, предложения и поддержка в Telegram и по электронной почте'}
+              </p>
+            </div>
+          </div>
+
+          <div className="p-1.5 rounded-lg text-slate-400 group-hover:text-white transition shrink-0">
+            <ChevronDown
+              className={`w-4 h-4 transition-transform duration-200 ${
+                openSections.feedback ? 'rotate-180' : ''
+              }`}
+            />
+          </div>
+        </div>
+
+        {openSections.feedback && (
+          <div className="pt-3.5 border-t border-slate-800/80 animate-in fade-in duration-150">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <a
+                href="https://t.me/smartfoodasystent"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 rounded-xl border border-sky-500/30 bg-sky-950/25 hover:bg-sky-900/35 text-slate-100 transition active:scale-[0.99]"
+              >
+                <div className="w-8 h-8 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0">
+                  <Send className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] text-slate-400 font-medium">Telegram</div>
+                  <div className="text-xs sm:text-sm font-bold text-sky-300 truncate">
+                    https://t.me/smartfoodasystent
+                  </div>
+                </div>
+              </a>
+
+              <a
+                href="mailto:smartfoodasystent@gmail.com"
+                className="flex items-center gap-3 p-3 rounded-xl border border-emerald-500/30 bg-emerald-950/25 hover:bg-emerald-900/35 text-slate-100 transition active:scale-[0.99]"
+              >
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] text-slate-400 font-medium">Email</div>
+                  <div className="text-xs sm:text-sm font-bold text-emerald-300 truncate">
+                    smartfoodasystent@gmail.com
+                  </div>
+                </div>
+              </a>
             </div>
           </div>
         )}

@@ -6,29 +6,31 @@ import { ThemeStyles, getBorderRadiusClass } from '../utils/themeHelper';
 interface PWAInstallButtonProps {
   label?: string;
   accentColor?: string;
-  variant?: 'default' | 'square';
+  variant?: 'default' | 'square' | 'banner';
   langCode?: string;
   themeStyles?: ThemeStyles;
   borderRadius?: string;
 }
 
 export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
-  label = 'Установить PWA',
+  label = 'Add to Home Screen',
   accentColor = '#10b981',
   variant = 'default',
-  langCode = 'ru',
+  langCode = 'en',
   themeStyles,
   borderRadius = 'rounded-2xl',
 }) => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showGuideModal, setShowGuideModal] = useState(false);
+  const [dismissedForSession, setDismissedForSession] = useState(false);
 
-  // Hide the button when the app is already installed / opened from the home screen
-  if (isInstalled) {
+  // Hide the button when the app is already installed / opened from the home screen,
+  // or when the user dismissed the banner for the current session
+  if (isInstalled || (variant === 'banner' && dismissedForSession)) {
     return null;
   }
 
-  const c = (langCode || 'ru').toLowerCase();
+  const c = (langCode || 'en').toLowerCase();
   const isEn = c.startsWith('en');
   const isPl = c.startsWith('pl');
 
@@ -37,6 +39,12 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     : isPl
     ? 'Dodaj do ekranu głównego'
     : 'Добавить на главный экран';
+
+  const laterTitle = isEn
+    ? 'Add later'
+    : isPl
+    ? 'Dodaj później'
+    : 'Добавить позже';
 
   const modalTitle = isEn
     ? 'Add to Home Screen'
@@ -47,7 +55,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   const modalSubtitle = isEn
     ? 'Create an app icon on your smartphone for quick one-tap launch'
     : isPl
-    ? 'Utwórz ikonę aplikacji na smartfonie, aby запускать одним касанием'
+    ? 'Utwórz ikonę aplikacji na smartfonie, aby uruchamiać jednym dotknięciem'
     : 'Создайте иконку приложения на смартфоне для быстрого запуска';
 
   const closeLabel = isEn ? 'Got it' : isPl ? 'Rozumiem' : 'Понятно';
@@ -67,7 +75,43 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
 
   return (
     <>
-      {variant === 'square' ? (
+      {variant === 'banner' ? (
+        <div
+          data-no-day-swipe="true"
+          className="flex items-stretch gap-2 w-full"
+        >
+          <button
+            type="button"
+            onClick={handlePress}
+            title={buttonTitle}
+            className={`flex-1 min-w-0 py-2.5 px-3.5 ${radiusClass} border flex items-center justify-center gap-2.5 text-xs sm:text-sm font-bold text-slate-950 shadow-md hover:brightness-105 transition-all active:scale-[0.99]`}
+            style={{
+              backgroundColor: accentColor,
+              borderColor: accentColor,
+            }}
+          >
+            <div className="w-6 h-6 rounded-lg bg-slate-950/15 flex items-center justify-center shrink-0 relative">
+              <Smartphone className="w-3.5 h-3.5 text-slate-950" />
+              <Plus className="w-2.5 h-2.5 stroke-[3] text-slate-950 -ml-0.5" />
+            </div>
+            <span className="truncate">{buttonTitle}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setDismissedForSession(true)}
+            title={laterTitle}
+            className={`shrink-0 px-3 py-2.5 ${radiusClass} border ${
+              themeStyles
+                ? `${themeStyles.borderColor} ${themeStyles.cardBg} ${themeStyles.textSecondary}`
+                : 'border-slate-700 bg-slate-900 text-slate-300'
+            } text-[11px] sm:text-xs font-semibold hover:text-white hover:border-slate-500 transition-all active:scale-95 flex items-center gap-1`}
+          >
+            <span>{laterTitle}</span>
+            <X className="w-3.5 h-3.5 opacity-75 shrink-0" />
+          </button>
+        </div>
+      ) : variant === 'square' ? (
         <button
           type="button"
           onClick={handlePress}
