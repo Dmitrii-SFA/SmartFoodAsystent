@@ -230,7 +230,7 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({
                   Cześć! Witaj w Smart Food Assistant 👋
                 </h3>
                 <p className={themeStyles.textSecondary}>
-                  Stworzyłem tę aplikację w pojedynkę — przede wszystkim dla самого siebie, opierając się na wieloletnim doświadczeniu w liczeniu kalorii w innych aplikacjach. Z czasem stała się tak wygodna na co dzień, że postanowiłem podzielić się nią z innymi. Nie ma tu reklam, nachalnego marketingu ani celu zarobienia milionów — to po prostu praktyczne narzędzie stworzone z sercem i dbałością o szczegóły.
+                  Stworzyłem tę aplikację w pojedynkę — przede wszystkim dla siebie, opierając się na wieloletnim doświadczeniu w liczeniu kalorii w innych aplikacjach. Z czasem stała się tak wygodna na co dzień, że postanowiłem podzielić się nią z innymi. Nie ma tu reklam, nachalnego marketingu ani celu zarobienia milionów — to po prostu praktyczne narzędzie stworzone z sercem i dbałością o szczegóły.
                 </p>
                 <p className={`font-semibold ${themeStyles.textPrimary}`}>
                   Czym ta aplikacja różni się od zwykłych liczników kalorii i jak wycisnąć z niej maksimum:
@@ -277,7 +277,7 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({
                   <span>🛒 Wspólna lista zakupów (nawet na pastę do zębów)</span>
                 </div>
                 <p className={themeStyles.textSecondary}>
-                  Nie musisz już переłączać się między licznikiem kalorii a notatnikiem w telefonie. Planujesz menu lub widzisz, że skończył się produkt? Kliknij jeden przycisk, a od razu trafi na listę zakupów. Lifehack: możesz dodać do swojej biblioteki artykuły domowe z zerową kalorycznością (np. mydło, gąbki czy pastę do zębów) i jednym kliknięciem dodawać je do listy przed wyjściem do sklepu.
+                  Nie musisz już przełączać się między licznikiem kalorii a notatnikiem w telefonie. Planujesz menu lub widzisz, że skończył się produkt? Kliknij jeden przycisk, a od razu trafi na listę zakupów. Lifehack: możesz dodać do swojej biblioteki artykuły domowe z zerową kalorycznością (np. mydło, gąbki czy pastę do zębów) i jednym kliknięciem dodawać je do listy przed wyjściem do sklepu.
                 </p>
               </div>
 

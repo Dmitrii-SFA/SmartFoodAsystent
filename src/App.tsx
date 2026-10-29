@@ -1037,6 +1037,7 @@ export default function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+  const [apiKeyModalShowInfo, setApiKeyModalShowInfo] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isAddFoodModalOpen, setIsAddFoodModalOpen] = useState(false);
   const [addFoodInitialCatId, setAddFoodInitialCatId] = useState<string | undefined>(undefined);
@@ -2301,7 +2302,14 @@ export default function App() {
               }}
               onSelectLanguage={handleSelectLanguage}
               onRequestNewLanguage={handleRequestNewLanguage}
-              onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
+              onOpenApiKeyModal={() => {
+                setApiKeyModalShowInfo(false);
+                setIsApiKeyModalOpen(true);
+              }}
+              onOpenApiKeyModalWithInfo={() => {
+                setApiKeyModalShowInfo(true);
+                setIsApiKeyModalOpen(true);
+              }}
               onOpenAiChat={() => setIsChatOpen(true)}
               onOpenResetModal={() => setIsResetModalOpen(true)}
               onOpenConfigModal={() => setIsConfigModalOpen(true)}
@@ -2468,7 +2476,10 @@ export default function App() {
       {/* Annual Access & Paywall Modal («Годовой доступ») */}
       <ApiKeyModal
         isOpen={isApiKeyModalOpen}
-        onClose={() => setIsApiKeyModalOpen(false)}
+        onClose={() => {
+          setIsApiKeyModalOpen(false);
+          setApiKeyModalShowInfo(false);
+        }}
         langCode={config.language.code}
         aiConfig={aiConfig}
         onSaveAiConfig={handleSaveAiConfig}
@@ -2477,6 +2488,7 @@ export default function App() {
         themeStyles={themeStyles}
         remainingDemoRequests={remainingDemoRequests}
         totalDemoLimit={quotaStatus.dailyLimit}
+        initialShowInfo={apiKeyModalShowInfo}
       />
 
       {/* Reset to Factory Defaults Modal */}

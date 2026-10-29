@@ -103,6 +103,7 @@ interface SettingsTabProps {
   ) => void;
   onUpdateSoundSettings?: (settings: SoundSettingsConfig) => void;
   onOpenWelcomeModal?: () => void;
+  onOpenApiKeyModalWithInfo?: () => void;
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({
@@ -132,6 +133,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   onImportSharedData,
   onUpdateSoundSettings,
   onOpenWelcomeModal,
+  onOpenApiKeyModalWithInfo,
 }) => {
   const radiusClass = getBorderRadiusClass(config.theme.borderRadius);
   const currentNutrientMode = config.theme.nutrientDisplayMode || 'compact';
@@ -287,8 +289,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       [id]: !prev[id],
     }));
   };
-
-  const openCount = Object.values(openSections).filter(Boolean).length;
 
   // Build Export Payload (exact same structure as Share buttons on Recipe & Daily Menu)
   const buildExportPayload = () => {
@@ -474,9 +474,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           <span className={`text-xs sm:text-sm font-bold truncate ${themeStyles.textPrimary}`}>
             {t.settingsSectionsTitle}
           </span>
-          <span className="text-[11px] font-mono tabular-nums px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 shrink-0">
-            {openCount} {t.openCountOfTotal} 9
-          </span>
           {onOpenWelcomeModal && (
             <button
               type="button"
@@ -538,6 +535,23 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                     ? `Pozostało: ${liveQuota.remainingRequests} / ${liveQuota.packageLimit}`
                     : `Осталось: ${liveQuota.remainingRequests} из ${liveQuota.packageLimit}`}
                 </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenApiKeyModalWithInfo ? onOpenApiKeyModalWithInfo() : onOpenApiKeyModal()
+                  }
+                  title={
+                    isEn
+                      ? 'About AI assistant & limits'
+                      : isPl
+                      ? 'O działaniu asystenta AI i limitach'
+                      : 'О работе ИИ-ассистента и лимитах'
+                  }
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-400 text-[11px] font-bold transition shrink-0 active:scale-95"
+                >
+                  <span className="text-xs leading-none">ⓘ</span>
+                  <span>{isEn ? 'Info' : isPl ? 'Informacja' : 'Информация'}</span>
+                </button>
               </div>
               <p className="text-xs leading-relaxed text-slate-400 break-words">
                 {liveQuota.isMasterKey

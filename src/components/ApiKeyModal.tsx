@@ -22,11 +22,14 @@ import {
   verifyAndActivateAccessKey,
 } from '../utils/accessControl';
 
+const STORAGE_KEY_AI_LIMITS_INFO_SEEN = 'sfa_ai_limits_info_seen_v1';
+
 interface ApiKeyModalProps {
   isOpen: boolean;
   onClose: () => void;
   themeStyles: ThemeStyles;
   langCode?: string;
+  initialShowInfo?: boolean;
   accessKey?: string;
   onSaveAccessKey?: (key: string) => void;
   // Optional legacy props for compatibility
@@ -43,6 +46,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   onClose,
   themeStyles,
   langCode = 'en',
+  initialShowInfo = false,
   accessKey,
   onSaveAccessKey,
   onSaveApiKey,
@@ -52,6 +56,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   const [activatedSuccess, setActivatedSuccess] = useState<boolean>(false);
   const [successDetails, setSuccessDetails] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isInfoOpen, setIsInfoOpen] = useState<boolean>(false);
   const [, setQuotaTick] = useState<number>(0);
 
   const c = (langCode || 'en').toLowerCase();
@@ -74,8 +79,22 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
       setSuccessDetails(null);
       setErrorMsg(null);
       setIsVerifying(false);
+
+      // При первом открытии окна «Пополнить / Ввести ключ» (или при клике на кнопку «Информация»)
+      // автоматически раскрываем текст «О работе ИИ-ассистента и почему здесь есть лимиты»
+      try {
+        const seenBefore = localStorage.getItem(STORAGE_KEY_AI_LIMITS_INFO_SEEN) === 'true';
+        if (!seenBefore || initialShowInfo) {
+          setIsInfoOpen(true);
+          localStorage.setItem(STORAGE_KEY_AI_LIMITS_INFO_SEEN, 'true');
+        } else {
+          setIsInfoOpen(false);
+        }
+      } catch {
+        setIsInfoOpen(Boolean(initialShowInfo));
+      }
     }
-  }, [isOpen, accessKey]);
+  }, [isOpen, accessKey, initialShowInfo]);
 
   if (!isOpen) return null;
 
@@ -162,21 +181,21 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-sm animate-in fade-in duration-200">
       <div
-        className={`w-full max-w-md my-auto border ${themeStyles.borderColor} ${themeStyles.cardBg} rounded-2xl shadow-2xl overflow-hidden flex flex-col`}
+        className={`w-full max-w-md max-h-[88vh] my-auto border ${themeStyles.borderColor} ${themeStyles.cardBg} rounded-2xl shadow-2xl overflow-hidden flex flex-col`}
       >
         {/* Top Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800/90 bg-slate-900/60">
-          <div className="flex items-center gap-2.5">
+        <div className="shrink-0 flex items-center justify-between gap-2 px-5 py-3.5 border-b border-slate-800/90 bg-slate-900/60">
+          <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/35 text-emerald-400 flex items-center justify-center shrink-0">
               <Sparkles className="w-5 h-5" />
             </div>
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block">
+            <div className="min-w-0">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block truncate">
                 {isRu ? 'Баланс ИИ-запросов' : isPl ? 'Saldo zapytań AI' : 'AI Requests Balance'}
               </span>
-              <h2 className="text-base font-extrabold text-white leading-tight">
+              <h2 className="text-sm sm:text-base font-extrabold text-white leading-tight truncate">
                 {isRu
                   ? `Пакет на ${PAID_PACKAGE_REQUESTS} ИИ-запросов`
                   : isPl
@@ -186,18 +205,182 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
-            aria-label={isRu ? 'Закрыть' : isPl ? 'Zamknij' : 'Close'}
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsInfoOpen((prev) => !prev)}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[11px] font-bold transition active:scale-95 ${
+                isInfoOpen
+                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-xs'
+                  : 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/35 text-emerald-300'
+              }`}
+              title={
+                isRu
+                  ? 'О работе ИИ-ассистента и почему здесь есть лимиты'
+                  : isPl
+                  ? 'O działaniu asystenta AI i dlaczego obowiązują limity'
+                  : 'How the AI assistant works and why there are limits'
+              }
+            >
+              <span className="text-xs leading-none">ⓘ</span>
+              <span>{isRu ? 'Информация' : isPl ? 'Informacja' : 'Info'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              aria-label={isRu ? 'Закрыть' : isPl ? 'Zamknij' : 'Close'}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Body */}
-        <div className="p-5 space-y-4 text-xs">
+        <div className="flex-1 overflow-y-auto scroll-smooth p-5 space-y-4 text-xs">
+          {/* Expandable Info Section: О работе ИИ-ассистента и почему здесь есть лимиты */}
+          {isInfoOpen && (
+            <div className="p-4 rounded-2xl border border-emerald-500/35 bg-slate-900/85 space-y-3 text-xs leading-relaxed animate-in fade-in duration-150">
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="text-xs sm:text-sm font-extrabold text-emerald-300 leading-snug">
+                  {isRu
+                    ? 'О работе ИИ-ассистента и почему здесь есть лимиты 💡'
+                    : isPl
+                    ? 'O działaniu asystenta AI i dlaczego są tutaj limity 💡'
+                    : 'How the AI assistant works & why there are limits 💡'}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setIsInfoOpen(false)}
+                  className="text-slate-400 hover:text-white p-0.5 rounded-lg shrink-0"
+                  title={isRu ? 'Свернуть' : isPl ? 'Zwiń' : 'Collapse'}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {isRu ? (
+                <div className="space-y-2.5 text-slate-300">
+                  <p>
+                    Само приложение, дневник питания, ваша база продуктов, рецепты и список покупок полностью бесплатны и останутся такими навсегда. Когда вы добавляете продукты или рецепты вручную, все расчеты происходят прямо на вашем устройстве — это не создает нагрузки на сервер и не требует никаких затрат с моей стороны.
+                  </p>
+                  <p>
+                    Однако работа умного ассистента (сканирование этикеток по фото, поиск нутриентов по названию и генерация рецептов) устроена иначе. Каждое обращение к нейросети проходит через внешние серверы искусственного интеллекта. Если приложением одновременно пользуется много людей, бесплатные квоты нейросети быстро исчерпываются: в какой-то момент ИИ просто перестанет отвечать, либо мне придется оплачивать каждый чужой запрос из собственного кармана.
+                  </p>
+                  <p className="font-semibold text-white">
+                    Чтобы приложение оставалось стабильным и доступным для всех, я разделил его работу на простые и честные правила:
+                  </p>
+
+                  <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
+                    <div className="font-bold text-emerald-300">
+                      🎁 100 бесплатных ИИ-запросов на старте
+                    </div>
+                    <p className="text-slate-300">
+                      Каждому новому пользователю сразу доступно 100 обращений к нейросети. По опыту, этого запаса с головой хватает на первые недели, чтобы без рутины отсканировать привычные продукты из холодильника, собрать собственную базу и создать основные рецепты.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
+                    <div className="font-bold text-cyan-300">
+                      ✍️ Бесплатный ручной режим без ограничений
+                    </div>
+                    <p className="text-slate-300">
+                      Когда стартовая сотня запросов закончится, приложение не заблокируется. Вы сможете и дальше без ограничений пользоваться собранной базой, вести дневник и добавлять новые продукты или рецепты вручную.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
+                    <div className="font-bold text-amber-300">
+                      🔋 Дополнительный пакет на 500 ИИ-запросов
+                    </div>
+                    <p className="text-slate-300">
+                      Если вы захотите и дальше активно пользоваться ИИ-сканером и генератором рецептов, вы сможете приобрести пакет еще на 500 запросов (без ограничения по сроку действия). Эта небольшая сумма идет исключительно на покрытие расходов за обращения к серверу нейросети.
+                    </p>
+                  </div>
+                </div>
+              ) : isPl ? (
+                <div className="space-y-2.5 text-slate-300">
+                  <p>
+                    Sama aplikacja, dziennik żywieniowy, Twoja baza produktów, przepisy i lista zakupów są w pełni darmowe i takie pozostaną na zawsze. Gdy dodajesz produkty lub przepisy ręcznie, wszystkie obliczenia odbywają się bezpośrednio na Twoim urządzeniu — nie obciąża to serwera i nie generuje żadnych kosztów z mojej strony.
+                  </p>
+                  <p>
+                    Jednak działanie inteligentnego asystenta (skanowanie etykiet ze zdjęć, wyszukiwanie wartości odżywczych po nazwie i generowanie przepisów) wygląda inaczej. Każde zapytanie do sieci neuronowej przechodzi przez zewnętrzne serwery sztucznej inteligencji. Gdy z aplikacji korzysta jednocześnie wiele osób, darmowe limity szybko się wyczerpują: w pewnym momencie AI po prostu przestaje odpowiadać albo musiałbym opłacać każde cudze zapytanie z własnej kieszeni.
+                  </p>
+                  <p className="font-semibold text-white">
+                    Aby aplikacja pozostała stabilna i dostępna dla wszystkich, podzieliłem jej działanie na proste i uczciwe zasady:
+                  </p>
+
+                  <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
+                    <div className="font-bold text-emerald-300">
+                      🎁 100 darmowych zapytań AI na start
+                    </div>
+                    <p className="text-slate-300">
+                      Każdy nowy użytkownik od razu otrzymuje 100 zapytań do sieci neuronowej. Z doświadczenia ten zapas w zupełności wystarcza na pierwsze tygodnie, aby bez żmudnego wpisywania zeskanować ulubione produkty z lodówki, zbudować własną bazę i stworzyć podstawowe przepisy.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
+                    <div className="font-bold text-cyan-300">
+                      ✍️ Darmowy tryb ręczny bez ograniczeń
+                    </div>
+                    <p className="text-slate-300">
+                      Gdy startowa setka zapytań się skończy, aplikacja nie zostanie zablokowana. Nadal będziesz mógł bez żadnych ograniczeń korzystać ze swojej bazy, prowadzić dziennik i dodawać nowe produkty lub przepisy ręcznie.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
+                    <div className="font-bold text-amber-300">
+                      🔋 Dodatkowy pakiet na 500 zapytań AI
+                    </div>
+                    <p className="text-slate-300">
+                      Jeśli zechcesz dalej aktywnie korzystać ze skanera AI i generatora przepisów, możesz dokupić pakiet kolejnych 500 zapytań (bez ograniczenia czasowego). Ta niewielka kwota pokrywa wyłącznie koszty zapytań do serwerów sieci neuronowej.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2.5 text-slate-300">
+                  <p>
+                    The app itself, food diary, your personal food database, recipes, and shopping list are 100% free and will stay free forever. When you add foods or recipes manually, all calculations happen right on your device — creating zero server load and zero cost on my end.
+                  </p>
+                  <p>
+                    However, the smart AI assistant (photo label scanning, nutrient lookup by name, and recipe generation) works differently. Every AI request goes through external artificial intelligence servers. When many people use the app at once, free AI quotas run out quickly: at some point the AI would either stop responding or I would have to pay for every user&apos;s request out of my own pocket.
+                  </p>
+                  <p className="font-semibold text-white">
+                    To keep the app stable and accessible for everyone, I set up simple and fair rules:
+                  </p>
+
+                  <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
+                    <div className="font-bold text-emerald-300">
+                      🎁 100 free AI requests at the start
+                    </div>
+                    <p className="text-slate-300">
+                      Every new user immediately gets 100 AI requests. From experience, this is more than enough for the first weeks to effortlessly scan your everyday groceries, build your personal food library, and create your core recipes.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
+                    <div className="font-bold text-cyan-300">
+                      ✍️ Unlimited free manual mode
+                    </div>
+                    <p className="text-slate-300">
+                      Even if your 100 starter requests run out, the app will never lock you out. You can continue using your saved food library, logging daily meals, and adding new foods or recipes manually without any limits.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
+                    <div className="font-bold text-amber-300">
+                      🔋 Add-on package of 500 AI requests
+                    </div>
+                    <p className="text-slate-300">
+                      If you want to keep actively using the AI scanner and recipe generator, you can get an extra package of 500 requests (with no expiration date). This small contribution goes strictly toward covering the external AI server costs.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Current Balance Status Box */}
           <div
             className={`p-3.5 rounded-xl border flex items-center justify-between gap-2 ${
