@@ -5,7 +5,6 @@ import {
   FolderOpen,
   ChefHat,
   ShoppingCart,
-  Globe,
   Wrench,
   Send,
   Mail,
@@ -138,7 +137,7 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({
                   <span>🗂 Чистая база продуктов — только под вас и на вашем языке</span>
                 </div>
                 <p className={themeStyles.textSecondary}>
-                  Вы начинаете с пустой библиотеки, и это сделано намеренно. В общих пользовательских базах других приложений царит хаос: кто-то ошибся в граммовках или БЖУ, кто-то сделал опечатку, а один и тот же продукт из магазина (например, из Biedronka или Lidl) записан десятком разных людей вперемешку на польском, русском, украинском и английском языках.
+                  Вы начинаете с пустой библиотеки, и это сделано намеренно. В общих пользовательских базах других приложений царит хаос: кто-то ошибся в граммовках или БЖУ, кто-то сделал опечатку, а один и тот же продукт из магазина записан десятком разных людей вперемешку на разных языках.
                 </p>
                 <p className={themeStyles.textSecondary}>
                   Здесь вы собираете свою идеальную, проверенную базу из тех продуктов, которые реально едите, и называете их на том языке, на котором удобно искать именно вам. А встроенный ИИ-сканер поможет заполнить нутриенты за пару секунд по фото этикетки или названию.
@@ -178,18 +177,7 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({
                 </p>
               </div>
 
-              {/* 4. Язык интерфейса */}
-              <div className="p-3.5 rounded-2xl border border-slate-800/80 bg-slate-900/45 space-y-1.5">
-                <div className="flex items-center gap-2 font-bold text-purple-400">
-                  <Globe className="w-4 h-4 shrink-0" />
-                  <span>🌍 Язык интерфейса</span>
-                </div>
-                <p className={themeStyles.textSecondary}>
-                  Вы в любой момент можете переключить язык самого приложения в настройках на тот, который вам комфортнее.
-                </p>
-              </div>
-
-              {/* 5. Активное тестирование и контакты */}
+              {/* 4. Активное тестирование и контакты */}
               <div className="p-3.5 rounded-2xl border border-emerald-500/30 bg-emerald-950/20 space-y-2.5">
                 <div className="flex items-center gap-2 font-bold text-emerald-400">
                   <Wrench className="w-4 h-4 shrink-0" />
@@ -243,7 +231,7 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({
                   <span>🗂 Czysta baza produktów — tylko pod Ciebie i w Twoim języku</span>
                 </div>
                 <p className={themeStyles.textSecondary}>
-                  Zaczynasz z przejrzystą biblioteką i jest to działanie celowe. W ogólnych bazach innych aplikacji panuje chaos: ktoś pomylił gramaturę lub makroskładniki, ktoś zrobił literówkę, a ten sam produkt ze sklepu (np. z Biedronki czy Lidla) jest wpisany przez dziesięć osób na przemian po polsku, rosyjsku, ukraińsku i angielsku.
+                  Zaczynasz z przejrzystą biblioteką i jest to działanie celowe. W ogólnych bazach innych aplikacji panuje chaos: ktoś pomylił gramaturę lub makroskładniki, ktoś zrobił literówkę, a ten sam produkt ze sklepu jest wpisany przez dziesięć różnych osób na przemian w różnych językach.
                 </p>
                 <p className={themeStyles.textSecondary}>
                   Tutaj budujesz własną, sprawdzoną bazę produktów, które naprawdę jesz, i nazywasz je w języku, w którym najwygodniej Ci je wyszukiwać. Wbudowany skaner AI pomoże uzupełnić wartości odżywcze w kilka sekund na podstawie zdjęcia etykiety lub nazwy.
@@ -278,16 +266,6 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({
                 </div>
                 <p className={themeStyles.textSecondary}>
                   Nie musisz już przełączać się między licznikiem kalorii a notatnikiem w telefonie. Planujesz menu lub widzisz, że skończył się produkt? Kliknij jeden przycisk, a od razu trafi na listę zakupów. Lifehack: możesz dodać do swojej biblioteki artykuły domowe z zerową kalorycznością (np. mydło, gąbki czy pastę do zębów) i jednym kliknięciem dodawać je do listy przed wyjściem do sklepu.
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-2xl border border-slate-800/80 bg-slate-900/45 space-y-1.5">
-                <div className="flex items-center gap-2 font-bold text-purple-400">
-                  <Globe className="w-4 h-4 shrink-0" />
-                  <span>🌍 Język interfejsu</span>
-                </div>
-                <p className={themeStyles.textSecondary}>
-                  W każdej chwili możesz zmienić język aplikacji w ustawieniach (lub na górze tego okna) na ten, który jest dla Ciebie najwygodniejszy.
                 </p>
               </div>
 
@@ -344,7 +322,7 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({
                   <span>🗂 Clean food database — tailored to you and in your language</span>
                 </div>
                 <p className={themeStyles.textSecondary}>
-                  You start with a clean library on purpose. Public crowd-sourced databases in other apps are chaotic: someone entered wrong macros or weights, someone made a typo, and the exact same store product (e.g., from Biedronka or Lidl) is listed ten times mixed across Polish, Russian, Ukrainian, and English.
+                  You start with a clean library on purpose. Public crowd-sourced databases in other apps are chaotic: someone entered wrong macros or weights, someone made a typo, and the exact same store product is listed by ten different people mixed across different languages.
                 </p>
                 <p className={themeStyles.textSecondary}>
                   Here, you build your own trusted database of the foods you actually eat, named in whichever language you prefer to search. And the built-in AI scanner fills in nutrients in seconds from a nutrition label photo or product name.
@@ -379,16 +357,6 @@ export const WelcomeOnboardingModal: React.FC<WelcomeOnboardingModalProps> = ({
                 </div>
                 <p className={themeStyles.textSecondary}>
                   No more jumping between your calorie tracker and phone notes. Planning a menu or just ran out of an item? Tap one button and it goes straight to your shopping list. Lifehack: you can add zero-calorie household essentials (like soap, sponges, or toothpaste) to your library and add them to your shopping list in one tap before heading to the store.
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-2xl border border-slate-800/80 bg-slate-900/45 space-y-1.5">
-                <div className="flex items-center gap-2 font-bold text-purple-400">
-                  <Globe className="w-4 h-4 shrink-0" />
-                  <span>🌍 Interface language</span>
-                </div>
-                <p className={themeStyles.textSecondary}>
-                  You can switch the app language at any time in Settings (or using the EN / RU / PL switcher at the top of this window) to whichever language is most comfortable for you.
                 </p>
               </div>
 
