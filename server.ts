@@ -1200,7 +1200,10 @@ function verifyServerKeyState(
       serverKeyStore.set(cleanKey, record);
     }
 
-    const isFirstActivation = !record.carryoverApplied && record.devices.length === 0;
+    const isFirstDeviceOrUnbound =
+      record.devices.length === 0 ||
+      (cleanDevice && record.devices.length === 1 && record.devices[0] === cleanDevice);
+    const canApplyCarryover = !record.carryoverApplied && isFirstDeviceOrUnbound;
     let carryoverAdded = 0;
 
     if (cleanDevice) {
@@ -1217,18 +1220,19 @@ function verifyServerKeyState(
       }
     }
 
-    if (isFirstActivation) {
-      let bonusToAdd = 0;
+    if (canApplyCarryover) {
+      let prevKeyRemaining = 0;
       if (cleanPrevKey && cleanPrevKey.toLowerCase() !== cleanKey.toLowerCase()) {
         const prevRec = serverKeyStore.get(cleanPrevKey);
         if (prevRec && prevRec.remaining > 0) {
-          bonusToAdd = prevRec.remaining;
+          prevKeyRemaining = prevRec.remaining;
           prevRec.remaining = 0;
         }
       }
-      if (bonusToAdd === 0 && carryoverRequests > 0) {
-        bonusToAdd = Math.min(5000, Math.max(0, Math.floor(carryoverRequests)));
-      }
+      const safeClientCarryover =
+        carryoverRequests > 0 ? Math.min(5000, Math.max(0, Math.floor(carryoverRequests))) : 0;
+      const bonusToAdd = Math.max(prevKeyRemaining, safeClientCarryover);
+
       if (bonusToAdd > 0) {
         record.remaining += bonusToAdd;
         carryoverAdded = bonusToAdd;
@@ -1273,7 +1277,10 @@ function verifyServerKeyState(
     serverKeyStore.set(cleanKey, fallbackRecord);
   }
 
-  const isFirstFallbackActivation = !fallbackRecord.carryoverApplied && fallbackRecord.devices.length === 0;
+  const isFirstFallbackDeviceOrUnbound =
+    fallbackRecord.devices.length === 0 ||
+    (cleanDevice && fallbackRecord.devices.length === 1 && fallbackRecord.devices[0] === cleanDevice);
+  const canApplyFallbackCarryover = !fallbackRecord.carryoverApplied && isFirstFallbackDeviceOrUnbound;
   let fallbackCarryoverAdded = 0;
 
   if (cleanDevice && !fallbackRecord.devices.includes(cleanDevice)) {
@@ -1288,7 +1295,7 @@ function verifyServerKeyState(
     fallbackRecord.devices.push(cleanDevice);
   }
 
-  if (isFirstFallbackActivation) {
+  if (canApplyFallbackCarryover) {
     const bonus = carryoverRequests > 0 ? Math.min(5000, Math.max(0, Math.floor(carryoverRequests))) : 0;
     if (bonus > 0) {
       fallbackRecord.remaining += bonus;
@@ -1394,7 +1401,12 @@ app.post(['/api', '/api/verify-key'], async (req: Request, res: Response) => {
     // 2. Verify key if provided
     let keyContext: ReturnType<typeof verifyServerKeyState> | null = null;
     if (accessKey) {
-      keyContext = verifyServerKeyState(accessKey, deviceId);
+      keyContext = verifyServerKeyState(
+        accessKey,
+        deviceId,
+        typeof requestData.carryoverRequests === 'number' ? requestData.carryoverRequests : 0,
+        typeof requestData.previousAccessKey === 'string' ? requestData.previousAccessKey : ''
+      );
       if (!keyContext.ok) {
         res.status(keyContext.status || 403).json({
           error: keyContext.error,

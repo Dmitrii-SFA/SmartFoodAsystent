@@ -102,6 +102,7 @@ interface SettingsTabProps {
     targetDateOverride?: string
   ) => void;
   onUpdateSoundSettings?: (settings: SoundSettingsConfig) => void;
+  onOpenWelcomeModal?: () => void;
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({
@@ -130,6 +131,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   dayLogs = {},
   onImportSharedData,
   onUpdateSoundSettings,
+  onOpenWelcomeModal,
 }) => {
   const radiusClass = getBorderRadiusClass(config.theme.borderRadius);
   const currentNutrientMode = config.theme.nutrientDisplayMode || 'compact';
@@ -475,6 +477,17 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           <span className="text-[11px] font-mono tabular-nums px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 shrink-0">
             {openCount} {t.openCountOfTotal} 9
           </span>
+          {onOpenWelcomeModal && (
+            <button
+              type="button"
+              onClick={onOpenWelcomeModal}
+              title={isEn ? 'About the App' : isPl ? 'O aplikacji' : 'О приложении'}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-400 text-[11px] font-bold transition shrink-0 active:scale-95"
+            >
+              <span className="text-xs leading-none">ⓘ</span>
+              <span>{isEn ? 'About' : isPl ? 'O aplikacji' : 'О приложении'}</span>
+            </button>
+          )}
         </div>
 
         <PWAInstallButton

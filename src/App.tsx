@@ -32,6 +32,10 @@ import { AIChatDrawer } from './components/AIChatDrawer';
 import { ConfigJsonModal } from './components/ConfigJsonModal';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { ResetConfirmModal } from './components/ResetConfirmModal';
+import {
+  WelcomeOnboardingModal,
+  hasSeenWelcomeModal,
+} from './components/WelcomeOnboardingModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { MealReminderModal } from './components/MealReminderModal';
 import {
@@ -1029,6 +1033,7 @@ export default function App() {
   };
 
   // Modals & Drawers state
+  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState<boolean>(() => !hasSeenWelcomeModal());
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
@@ -1112,12 +1117,14 @@ export default function App() {
         } else {
           setApiKey(activatedKey);
           setDemoRequestsUsed(getQuotaStatus().usedRequests);
+          const totalAvail = res.remainingRequests ?? 500;
+          const addedCarry = res.carryoverAdded ?? 0;
           setConfigToast({
             message: res.isMaster
               ? 'Мастер-ключ владельца активирован! Полный безлимит.'
-              : `Пакет на 500 ИИ-запросов успешно активирован! (Доступно: ${
-                  res.remainingRequests ?? 500
-                })`,
+              : addedCarry > 0
+              ? `Ключ активирован! Остаток (+${addedCarry}) прибавлен к 500 → доступно: ${totalAvail}`
+              : `Пакет на 500 ИИ-запросов успешно активирован! (Доступно: ${totalAvail})`,
             visible: true,
           });
         }
@@ -1136,10 +1143,21 @@ export default function App() {
     const updatedQuota = getQuotaStatus();
     setDemoRequestsUsed(updatedQuota.usedRequests);
     if (trimmed) {
+      const c = (config.language?.code || 'en').toLowerCase();
+      const isRu = c.startsWith('ru');
+      const isPl = c.startsWith('pl');
       setConfigToast({
         message: updatedQuota.isMasterKey
-          ? 'Мастер-ключ активирован! Полный безлимит запросов.'
-          : `Ключ активирован! Доступно ИИ-запросов: ${updatedQuota.remainingRequests} из ${updatedQuota.packageLimit}.`,
+          ? isRu
+            ? 'Мастер-ключ активирован! Полный безлимит запросов.'
+            : isPl
+            ? 'Klucz główny aktywowany! Pełny brak limitów.'
+            : 'Master key activated! Unlimited requests.'
+          : isRu
+          ? `Ключ активирован! Доступно ИИ-запросов: ${updatedQuota.remainingRequests} из ${updatedQuota.packageLimit}.`
+          : isPl
+          ? `Klucz aktywowany! Dostępne zapytania AI: ${updatedQuota.remainingRequests} z ${updatedQuota.packageLimit}.`
+          : `Key activated! Available AI requests: ${updatedQuota.remainingRequests} of ${updatedQuota.packageLimit}.`,
         visible: true,
       });
       setTimeout(() => {
@@ -2384,6 +2402,7 @@ export default function App() {
                   soundSettings: newSoundSettings,
                 }));
               }}
+              onOpenWelcomeModal={() => setIsWelcomeModalOpen(true)}
             />
           </div>
         )}
@@ -2450,6 +2469,7 @@ export default function App() {
       <ApiKeyModal
         isOpen={isApiKeyModalOpen}
         onClose={() => setIsApiKeyModalOpen(false)}
+        langCode={config.language.code}
         aiConfig={aiConfig}
         onSaveAiConfig={handleSaveAiConfig}
         apiKey={apiKey}
@@ -2465,6 +2485,23 @@ export default function App() {
         onClose={() => setIsResetModalOpen(false)}
         onConfirmReset={handleRestoreOriginalProgram}
         themeStyles={themeStyles}
+      />
+
+      {/* One-Time Welcome Onboarding & About Modal */}
+      <WelcomeOnboardingModal
+        isOpen={isWelcomeModalOpen}
+        onClose={() => setIsWelcomeModalOpen(false)}
+        themeStyles={themeStyles}
+        langCode={config.language.code}
+        onSwitchLanguage={(code) => {
+          const targetLang =
+            (config.installedLanguages || DEFAULT_INSTALLED_LANGUAGES).find(
+              (l) => l.code.slice(0, 2).toLowerCase() === code
+            ) || DEFAULT_INSTALLED_LANGUAGES.find((l) => l.code === code);
+          if (targetLang) {
+            handleSelectLanguage(targetLang);
+          }
+        }}
       />
     </div>
   );

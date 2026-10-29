@@ -245,6 +245,7 @@ async function verifyAndLoadKeyState({
   registerDevice = true,
   carryoverRequests = 0,
   previousAccessKey = "",
+  isExplicitVerify = false,
 }) {
   const cleanKey = (accessKey || "").trim();
   const cleanDevice = (deviceId || "").trim();
@@ -304,8 +305,13 @@ async function verifyAndLoadKeyState({
         }
       }
 
-      const isFirstActivation =
-        !record.carryoverApplied && record.devices.length === 0;
+      const isFirstDeviceOrUnbound =
+        record.devices.length === 0 ||
+        (cleanDevice &&
+          record.devices.length === 1 &&
+          record.devices[0] === cleanDevice);
+      const canApplyCarryover =
+        !record.carryoverApplied && isFirstDeviceOrUnbound;
       let carryoverAdded = 0;
 
       // 3. Проверка и привязка x-device-id (максимум 2 устройства)
@@ -327,8 +333,8 @@ async function verifyAndLoadKeyState({
       }
 
       // 4. При первой активации нового ключа прибавляем неизрасходованный остаток запросов
-      if (isFirstActivation && registerDevice) {
-        let bonusToAdd = 0;
+      if (canApplyCarryover && registerDevice) {
+        let prevKeyRemainingInKv = 0;
 
         if (
           cleanPrevKey &&
@@ -340,12 +346,13 @@ async function verifyAndLoadKeyState({
             if (foundPrev) {
               const prevRecord = parseKvRecord(foundPrev.rawExisting);
               if (prevRecord && prevRecord.remaining > 0) {
-                bonusToAdd = prevRecord.remaining;
+                prevKeyRemainingInKv = prevRecord.remaining;
                 await kv.put(
                   foundPrev.storageKey,
                   JSON.stringify({
                     remaining: 0,
-                    initialLimit: prevRecord.initialLimit || PACKAGE_REQUESTS_LIMIT,
+                    initialLimit:
+                      prevRecord.initialLimit || PACKAGE_REQUESTS_LIMIT,
                     devices: prevRecord.devices,
                     carryoverApplied: true,
                   })
@@ -353,18 +360,27 @@ async function verifyAndLoadKeyState({
               }
             }
           } catch (prevErr) {
-            console.warn("Failed to transfer carryover from previous key:", prevErr);
+            console.warn(
+              "Failed to transfer carryover from previous key:",
+              prevErr
+            );
           }
         }
 
-        if (
-          bonusToAdd === 0 &&
+        const parsedClientCarryover =
           typeof carryoverRequests === "number" &&
-          !Number.isNaN(carryoverRequests) &&
-          carryoverRequests > 0
-        ) {
-          bonusToAdd = Math.min(5000, Math.max(0, Math.floor(carryoverRequests)));
-        }
+          !Number.isNaN(carryoverRequests)
+            ? Math.floor(carryoverRequests)
+            : typeof carryoverRequests === "string" &&
+              /^\d+$/.test(carryoverRequests.trim())
+            ? parseInt(carryoverRequests.trim(), 10)
+            : 0;
+        const safeClientCarryover = Math.min(
+          5000,
+          Math.max(0, parsedClientCarryover)
+        );
+
+        const bonusToAdd = Math.max(prevKeyRemainingInKv, safeClientCarryover);
 
         if (bonusToAdd > 0) {
           record.remaining += bonusToAdd;
@@ -375,7 +391,9 @@ async function verifyAndLoadKeyState({
           record.initialLimit || PACKAGE_REQUESTS_LIMIT,
           record.remaining
         );
-        record.carryoverApplied = true;
+        if (bonusToAdd > 0 || isExplicitVerify) {
+          record.carryoverApplied = true;
+        }
         needsSave = true;
       }
 
@@ -531,6 +549,7 @@ export async function onRequestPost(context) {
           typeof requestData.previousAccessKey === "string"
             ? requestData.previousAccessKey
             : "",
+        isExplicitVerify: true,
       });
 
       if (!verification.ok) {
@@ -574,6 +593,15 @@ export async function onRequestPost(context) {
         deviceId,
         env: context.env,
         registerDevice: true,
+        carryoverRequests:
+          typeof requestData.carryoverRequests === "number"
+            ? requestData.carryoverRequests
+            : 0,
+        previousAccessKey:
+          typeof requestData.previousAccessKey === "string"
+            ? requestData.previousAccessKey
+            : "",
+        isExplicitVerify: false,
       });
 
       if (!keyContext.ok) {
@@ -709,6 +737,7 @@ export async function onRequestPost(context) {
       isMaster,
       remainingRequests: updatedRemaining,
       packageLimit: updatedPackageLimit,
+      carryoverAdded: keyContext?.carryoverAdded || 0,
       storageMode,
     };
 

@@ -14,6 +14,7 @@ const DEVICE_ID_STORAGE_KEY = 'sfa_device_id_v1';
 const STARTER_REMAINING_STORAGE_KEY = 'sfa_starter_remaining_v1';
 const KEY_BALANCES_STORAGE_KEY = 'sfa_key_balances_v1';
 const KEY_LIMITS_STORAGE_KEY = 'sfa_key_limits_v1';
+const KEY_CARRYOVER_BONUS_STORAGE_KEY = 'sfa_key_carryover_bonus_v1';
 const MASTER_KEY_FLAG_STORAGE_KEY = 'sfa_is_master_key_v1';
 const RECENT_TIMESTAMPS_STORAGE_KEY = 'sfa_recent_ai_timestamps_v1';
 
@@ -162,13 +163,71 @@ function saveKeyLimitsMap(map: Record<string, number>): void {
   }
 }
 
+function loadKeyCarryoverBonusMap(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(KEY_CARRYOVER_BONUS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
+function saveKeyCarryoverBonusMap(map: Record<string, number>): void {
+  try {
+    localStorage.setItem(KEY_CARRYOVER_BONUS_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+export function getKeyCarryoverBonus(key: string): number {
+  const clean = (key || '').trim();
+  if (!clean) return 0;
+  const map = loadKeyCarryoverBonusMap();
+  const matchedKey = Object.keys(map).find(
+    (k) => k.trim().toLowerCase() === clean.toLowerCase()
+  );
+  const val = matchedKey ? map[matchedKey] : map[clean];
+  if (typeof val === 'number' && !Number.isNaN(val) && val > 0) {
+    return Math.floor(val);
+  }
+  return 0;
+}
+
+export function setKeyCarryoverBonus(key: string, bonus: number): void {
+  const clean = (key || '').trim();
+  if (!clean) return;
+  const map = loadKeyCarryoverBonusMap();
+  const matchedKey = Object.keys(map).find(
+    (k) => k.trim().toLowerCase() === clean.toLowerCase()
+  );
+  const targetKey = matchedKey || clean;
+  const normalized = Math.max(0, Math.floor(Number(bonus) || 0));
+  if (normalized > 0) {
+    map[targetKey] = normalized;
+  } else {
+    delete map[targetKey];
+  }
+  saveKeyCarryoverBonusMap(map);
+}
+
 export function getKeyPackageLimit(key: string): number {
   const clean = (key || '').trim();
   if (!clean) return PAID_PACKAGE_REQUESTS;
   const map = loadKeyLimitsMap();
+  const matchedKey = Object.keys(map).find(
+    (k) => k.trim().toLowerCase() === clean.toLowerCase()
+  );
+  const storedLimit = matchedKey ? map[matchedKey] : map[clean];
   const rem = getKeyRemainingBalance(clean);
-  if (typeof map[clean] === 'number' && !Number.isNaN(map[clean]) && map[clean] > 0) {
-    return Math.max(PAID_PACKAGE_REQUESTS, Math.floor(map[clean]), rem);
+  if (typeof storedLimit === 'number' && !Number.isNaN(storedLimit) && storedLimit > 0) {
+    return Math.max(PAID_PACKAGE_REQUESTS, Math.floor(storedLimit), rem);
   }
   const initial = Math.max(PAID_PACKAGE_REQUESTS, rem);
   map[clean] = initial;
@@ -180,7 +239,14 @@ export function setKeyPackageLimit(key: string, limit: number): void {
   const clean = (key || '').trim();
   if (!clean) return;
   const map = loadKeyLimitsMap();
-  map[clean] = Math.max(PAID_PACKAGE_REQUESTS, Math.floor(Number(limit) || PAID_PACKAGE_REQUESTS));
+  const matchedKey = Object.keys(map).find(
+    (k) => k.trim().toLowerCase() === clean.toLowerCase()
+  );
+  const targetKey = matchedKey || clean;
+  map[targetKey] = Math.max(
+    PAID_PACKAGE_REQUESTS,
+    Math.floor(Number(limit) || PAID_PACKAGE_REQUESTS)
+  );
   saveKeyLimitsMap(map);
 }
 
@@ -188,8 +254,12 @@ export function getKeyRemainingBalance(key: string): number {
   const clean = (key || '').trim();
   if (!clean) return 0;
   const map = loadKeyBalancesMap();
-  if (typeof map[clean] === 'number' && !Number.isNaN(map[clean])) {
-    return Math.max(0, Math.floor(map[clean]));
+  const matchedKey = Object.keys(map).find(
+    (k) => k.trim().toLowerCase() === clean.toLowerCase()
+  );
+  const storedVal = matchedKey ? map[matchedKey] : map[clean];
+  if (typeof storedVal === 'number' && !Number.isNaN(storedVal)) {
+    return Math.max(0, Math.floor(storedVal));
   }
   // Для нового активированного ключа по умолчанию начисляется 500 запросов
   map[clean] = PAID_PACKAGE_REQUESTS;
@@ -202,14 +272,22 @@ export function setKeyRemainingBalance(key: string, remaining: number): void {
   if (!clean) return;
   const normalized = Math.max(0, Math.floor(Number(remaining) || 0));
   const map = loadKeyBalancesMap();
-  map[clean] = normalized;
+  const matchedKey = Object.keys(map).find(
+    (k) => k.trim().toLowerCase() === clean.toLowerCase()
+  );
+  const targetKey = matchedKey || clean;
+  map[targetKey] = normalized;
   saveKeyBalancesMap(map);
 
   // Если баланс превышает текущий сохранённый лимит пакета (например, 533 из-за переноса остатка), обновляем лимит пакета
   const limitsMap = loadKeyLimitsMap();
-  const currentLimit = limitsMap[clean] || PAID_PACKAGE_REQUESTS;
+  const matchedLimitKey = Object.keys(limitsMap).find(
+    (k) => k.trim().toLowerCase() === clean.toLowerCase()
+  );
+  const targetLimitKey = matchedLimitKey || clean;
+  const currentLimit = limitsMap[targetLimitKey] || PAID_PACKAGE_REQUESTS;
   if (normalized > currentLimit) {
-    limitsMap[clean] = normalized;
+    limitsMap[targetLimitKey] = normalized;
     saveKeyLimitsMap(limitsMap);
   }
 
@@ -286,6 +364,8 @@ export function saveAccessKey(key: string): void {
 
 /**
  * Автоматическое считывание ключа из URL (?key=...)
+ * ВАЖНО: не вызывает saveAccessKey преждевременно, чтобы verifyAndActivateAccessKey
+ * сначала считал текущий остаток запросов (currentCarryover) и прибавил его к 500!
  */
 export function checkAndActivateUrlAccessKey(): string | null {
   if (typeof window === 'undefined') return null;
@@ -294,7 +374,6 @@ export function checkAndActivateUrlAccessKey(): string | null {
     const keyParam = url.searchParams.get('key');
     if (keyParam && keyParam.trim().length > 0) {
       const cleanKey = keyParam.trim();
-      saveAccessKey(cleanKey);
       url.searchParams.delete('key');
       const nextSearch = url.searchParams.toString();
       const cleanUrl =
@@ -309,8 +388,8 @@ export function checkAndActivateUrlAccessKey(): string | null {
 }
 
 /**
- * Серверная проверка ключа (валидность по списку разрешенных, привязка к максимум 2 устройствам,
- * суммирование неизрасходованного остатка с 500 запросами нового ключа, мастер-ключ)
+ * Серверная проверка ключа (валидность по USERS_KV / ALLOWED_KEYS, привязка к максимум 2 устройствам,
+ * гарантированное суммирование неизрасходованного остатка с 500 запросами нового ключа, мастер-ключ)
  */
 export async function verifyAndActivateAccessKey(rawKey: string): Promise<KeyVerificationResult> {
   const cleanKey = (rawKey || '').trim();
@@ -329,21 +408,30 @@ export async function verifyAndActivateAccessKey(rawKey: string): Promise<KeyVer
     previousAccessKey.toLowerCase() === cleanKey.toLowerCase();
   const wasMaster = isMasterAccessKeyActive();
   const existingBalances = loadKeyBalancesMap();
-  const isBrandNewKeyLocally = typeof existingBalances[cleanKey] !== 'number';
+  const hasExistingBalanceForKey = Object.keys(existingBalances).some(
+    (k) => k.trim().toLowerCase() === cleanKey.toLowerCase()
+  );
+  const isBrandNewKeyLocally = !hasExistingBalanceForKey;
 
-  // Вычисляем текущий неизрасходованный остаток пользователя (со старого ключа или со стартового пакета),
-  // чтобы при первой активации нового ключа он прибавился к 500 запросам (например, 500 + 33 = 533).
+  // Берём точный текущий остаток запросов пользователя, который отображается в приложении
+  // (из стартовых 100 запросов или из предыдущего ключа), чтобы прибавить его к 500 запросам нового ключа.
+  const activeQuotaBeforeActivation = getQuotaStatus();
   const currentCarryover =
     !isSameKey && !wasMaster
-      ? previousAccessKey
-        ? getKeyRemainingBalance(previousAccessKey)
-        : getStarterRemainingRequests()
+      ? Math.max(
+          0,
+          activeQuotaBeforeActivation.remainingRequests,
+          previousAccessKey
+            ? getKeyRemainingBalance(previousAccessKey)
+            : getStarterRemainingRequests()
+        )
       : 0;
 
   const applyLocalCarryoverCleanup = () => {
     if (!isSameKey && !wasMaster && currentCarryover > 0) {
       if (previousAccessKey) {
         setKeyRemainingBalance(previousAccessKey, 0);
+        setKeyCarryoverBonus(previousAccessKey, 0);
       } else {
         setStarterRemainingRequests(0);
       }
@@ -411,18 +499,44 @@ export async function verifyAndActivateAccessKey(rawKey: string): Promise<KeyVer
             : 0;
 
         if (!isMaster && typeof data.remainingRequests === 'number') {
-          setKeyRemainingBalance(cleanKey, data.remainingRequests);
-          const resolvedLimit =
+          let finalRemaining = data.remainingRequests;
+          let finalLimit =
             typeof data.packageLimit === 'number' && data.packageLimit > 0
               ? Math.max(data.packageLimit, data.remainingRequests)
               : Math.max(PAID_PACKAGE_REQUESTS, data.remainingRequests);
-          setKeyPackageLimit(cleanKey, resolvedLimit);
+
+          // Защита на случай, если сервер вернул базовые 500 без учёта переданного остатка
+          // при первой активации нового ключа на первом устройстве:
+          const isFirstDeviceOnServer = (data.devicesUsed ?? 1) <= 1;
+          const serverDidNotIncludeCarryover =
+            carryoverAdded === 0 &&
+            finalRemaining <= PAID_PACKAGE_REQUESTS &&
+            finalLimit <= PAID_PACKAGE_REQUESTS;
+
+          if (
+            isBrandNewKeyLocally &&
+            currentCarryover > 0 &&
+            isFirstDeviceOnServer &&
+            serverDidNotIncludeCarryover
+          ) {
+            finalRemaining = data.remainingRequests + currentCarryover;
+            finalLimit = Math.max(finalLimit + currentCarryover, finalRemaining);
+            carryoverAdded = currentCarryover;
+            setKeyCarryoverBonus(cleanKey, currentCarryover);
+          } else if (carryoverAdded > 0 || finalRemaining > PAID_PACKAGE_REQUESTS) {
+            // Сервер уже прибавил и сохранил суммарный баланс в USERS_KV
+            setKeyCarryoverBonus(cleanKey, 0);
+          }
+
+          setKeyRemainingBalance(cleanKey, finalRemaining);
+          setKeyPackageLimit(cleanKey, finalLimit);
           applyLocalCarryoverCleanup();
         } else if (!isMaster) {
           if (isBrandNewKeyLocally && currentCarryover > 0) {
             const combined = PAID_PACKAGE_REQUESTS + currentCarryover;
             setKeyRemainingBalance(cleanKey, combined);
             setKeyPackageLimit(cleanKey, combined);
+            setKeyCarryoverBonus(cleanKey, currentCarryover);
             carryoverAdded = currentCarryover;
             applyLocalCarryoverCleanup();
           } else {
@@ -452,6 +566,7 @@ export async function verifyAndActivateAccessKey(rawKey: string): Promise<KeyVer
         const combined = PAID_PACKAGE_REQUESTS + currentCarryover;
         setKeyRemainingBalance(cleanKey, combined);
         setKeyPackageLimit(cleanKey, combined);
+        setKeyCarryoverBonus(cleanKey, currentCarryover);
         fallbackCarryoverAdded = currentCarryover;
         applyLocalCarryoverCleanup();
       }
@@ -472,6 +587,7 @@ export async function verifyAndActivateAccessKey(rawKey: string): Promise<KeyVer
           const combined = PAID_PACKAGE_REQUESTS + currentCarryover;
           setKeyRemainingBalance(cleanKey, combined);
           setKeyPackageLimit(cleanKey, combined);
+          setKeyCarryoverBonus(cleanKey, currentCarryover);
           fallbackCarryoverAdded = currentCarryover;
           applyLocalCarryoverCleanup();
         }
@@ -493,6 +609,7 @@ export async function verifyAndActivateAccessKey(rawKey: string): Promise<KeyVer
     const combined = PAID_PACKAGE_REQUESTS + currentCarryover;
     setKeyRemainingBalance(cleanKey, combined);
     setKeyPackageLimit(cleanKey, combined);
+    setKeyCarryoverBonus(cleanKey, currentCarryover);
     fallbackCarryoverAdded = currentCarryover;
     applyLocalCarryoverCleanup();
   }
@@ -837,6 +954,8 @@ export async function callCloudflareWorkerAI(payload: {
     });
   }
 
+  const pendingCarryoverBonus = savedAccessKey ? getKeyCarryoverBonus(savedAccessKey) : 0;
+
   const requestBody: Record<string, any> = {
     contents: [
       {
@@ -850,6 +969,7 @@ export async function callCloudflareWorkerAI(payload: {
     },
     accessKey: savedAccessKey || '',
     deviceId,
+     ...(pendingCarryoverBonus > 0 ? { carryoverRequests: pendingCarryoverBonus } : {}),
     action: payload.action || 'ai_request',
     ...(payload.extraPayload || {}),
   };
@@ -934,6 +1054,7 @@ export async function callCloudflareWorkerAI(payload: {
     // При исчерпании 500 запросов по ключу синхронизируем баланс с нулем
     if (savedAccessKey && (errCode === 'KEY_EXHAUSTED' || errRemaining === 0)) {
       setKeyRemainingBalance(savedAccessKey, 0);
+      setKeyCarryoverBonus(savedAccessKey, 0);
     }
 
     rollbackLastRequestTimestamp();
@@ -1017,14 +1138,42 @@ export async function callCloudflareWorkerAI(payload: {
         ? data.packageLimit
         : null;
 
+    const serverCarryoverAdded =
+      typeof data?._quota?.carryoverAdded === 'number' && data._quota.carryoverAdded > 0
+        ? data._quota.carryoverAdded
+        : 0;
+
+    if (serverCarryoverAdded > 0) {
+      setKeyCarryoverBonus(savedAccessKey, 0);
+    }
+
     if (serverRemaining !== null) {
-      // Серверное хранилище вернуло точный остаток по ключу
-      setKeyRemainingBalance(savedAccessKey, serverRemaining);
-      if (serverPackageLimit !== null && serverPackageLimit > 0) {
-        setKeyPackageLimit(savedAccessKey, Math.max(serverPackageLimit, serverRemaining));
+      const unmergedBonus = getKeyCarryoverBonus(savedAccessKey);
+      const serverAlreadyHasBonus =
+        (serverPackageLimit !== null && serverPackageLimit > PAID_PACKAGE_REQUESTS) ||
+        serverRemaining > PAID_PACKAGE_REQUESTS;
+
+      if (serverAlreadyHasBonus && unmergedBonus > 0) {
+        setKeyCarryoverBonus(savedAccessKey, 0);
       }
+
+      const effectiveRemaining =
+        !serverAlreadyHasBonus && unmergedBonus > 0
+          ? serverRemaining + unmergedBonus
+          : serverRemaining;
+
+      const effectiveLimit =
+        serverPackageLimit !== null && serverPackageLimit > 0
+          ? Math.max(
+              serverPackageLimit + (!serverAlreadyHasBonus && unmergedBonus > 0 ? unmergedBonus : 0),
+              effectiveRemaining
+            )
+          : Math.max(getKeyPackageLimit(savedAccessKey), effectiveRemaining);
+
+      setKeyRemainingBalance(savedAccessKey, effectiveRemaining);
+      setKeyPackageLimit(savedAccessKey, effectiveLimit);
     } else {
-      // Fallback: если серверное хранилище еще не подключено, клиент сам уменьшает баланс из 500 на 1
+      // Fallback: если серверное хранилище еще не подключено, клиент сам уменьшает баланс на 1
       decrementKeyRemainingBalance(savedAccessKey);
     }
   } else {
