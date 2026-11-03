@@ -692,6 +692,48 @@ export default {
 
           await kv.put(sessionKvKey, newKey);
 
+          try {
+            const metadataBody = `metadata[generated_key]=${encodeURIComponent(newKey)}`;
+            const stripeMetaHeaders = {
+              Authorization: `Bearer ${stripeSecretKey}`,
+              "Content-Type": "application/x-www-form-urlencoded",
+            };
+
+            const paymentIntentId =
+              typeof stripeSession.payment_intent === "string" &&
+              stripeSession.payment_intent.startsWith("pi_")
+                ? stripeSession.payment_intent
+                : typeof stripeSession.payment_intent?.id === "string" &&
+                  stripeSession.payment_intent.id.startsWith("pi_")
+                ? stripeSession.payment_intent.id
+                : "";
+
+            if (paymentIntentId) {
+              await fetch(
+                `https://api.stripe.com/v1/payment_intents/${encodeURIComponent(paymentIntentId)}`,
+                {
+                  method: "POST",
+                  headers: stripeMetaHeaders,
+                  body: metadataBody,
+                }
+              );
+            }
+
+            await fetch(
+              `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`,
+              {
+                method: "POST",
+                headers: stripeMetaHeaders,
+                body: metadataBody,
+              }
+            );
+          } catch (stripeMetaErr) {
+            console.warn(
+              "Failed to save generated_key to Stripe metadata:",
+              stripeMetaErr
+            );
+          }
+
           return new Response(
             JSON.stringify({ key: newKey }),
             {
