@@ -139,8 +139,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   const currentNutrientMode = config.theme.nutrientDisplayMode || 'compact';
   const langCode = config.language?.code || 'ru';
   const c = langCode.toLowerCase();
-  const isEn = c.startsWith('en');
+  const isRu = c.startsWith('ru');
   const isPl = c.startsWith('pl');
+  const isEn = !isRu && !isPl;
   const t = getUITranslations(langCode, config.language?.labels);
 
   const activeCode = langCode.slice(0, 2).toUpperCase();
@@ -478,11 +479,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             <button
               type="button"
               onClick={onOpenWelcomeModal}
-              title={isEn ? 'About the App' : isPl ? 'O aplikacji' : 'О приложении'}
+              title={t.aboutAppBtn}
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-400 text-[11px] font-bold transition shrink-0 active:scale-95"
             >
               <span className="text-xs leading-none">ⓘ</span>
-              <span>{isEn ? 'About' : isPl ? 'O aplikacji' : 'О приложении'}</span>
+              <span>{t.aboutAppBtn}</span>
             </button>
           )}
         </div>
@@ -508,11 +509,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h4 className={`text-sm sm:text-base font-bold leading-snug ${themeStyles.textPrimary}`}>
-                  {isEn
-                    ? 'AI Requests Balance & Key'
-                    : isPl
-                    ? 'Bilans zapytań AI i klucz'
-                    : 'Баланс ИИ-запросов и ключ доступа'}
+                  {t.secBalanceTitle}
                 </h4>
                 <span
                   className={`inline-flex items-center text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-lg border ${
@@ -524,53 +521,39 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                   }`}
                 >
                   {liveQuota.isMasterKey
-                    ? isEn
-                      ? 'Remaining: ∞'
-                      : isPl
-                      ? 'Pozostało: ∞'
-                      : 'Осталось: ∞'
-                    : isEn
-                    ? `Remaining: ${liveQuota.remainingRequests} / ${liveQuota.packageLimit}`
-                    : isPl
-                    ? `Pozostało: ${liveQuota.remainingRequests} / ${liveQuota.packageLimit}`
-                    : `Осталось: ${liveQuota.remainingRequests} из ${liveQuota.packageLimit}`}
+                    ? `${t.remainingLabel} ∞`
+                    : `${t.remainingLabel} ${liveQuota.remainingRequests} / ${liveQuota.packageLimit}`}
                 </span>
                 <button
                   type="button"
                   onClick={() =>
                     onOpenApiKeyModalWithInfo ? onOpenApiKeyModalWithInfo() : onOpenApiKeyModal()
                   }
-                  title={
-                    isEn
-                      ? 'About AI assistant & limits'
-                      : isPl
-                      ? 'O działaniu asystenta AI i limitach'
-                      : 'О работе ИИ-ассистента и лимитах'
-                  }
+                  title={t.infoBtn}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-400 text-[11px] font-bold transition shrink-0 active:scale-95"
                 >
                   <span className="text-xs leading-none">ⓘ</span>
-                  <span>{isEn ? 'Info' : isPl ? 'Informacja' : 'Информация'}</span>
+                  <span>{t.infoBtn}</span>
                 </button>
               </div>
               <p className="text-xs leading-relaxed text-slate-400 break-words">
                 {liveQuota.isMasterKey
-                  ? isEn
-                    ? 'Master key active — unlimited AI requests without restrictions'
+                  ? isRu
+                    ? 'Активен мастер-ключ владельца — полный безлимит ИИ-запросов'
                     : isPl
                     ? 'Klucz główny aktywny — nielimitowane zapytania AI'
-                    : 'Активен мастер-ключ владельца — полный безлимит ИИ-запросов'
+                    : 'Master key active — unlimited AI requests without restrictions'
                   : liveQuota.hasAccessKey
-                  ? isEn
-                    ? 'Package of 500 AI requests (no expiration date, up to 2 devices)'
+                  ? isRu
+                    ? 'Активен пакет на 500 ИИ-запросов без срока действия (до 2 устройств)'
                     : isPl
                     ? 'Pakiet 500 zapytań AI (bez terminu ważności, do 2 urządzeń)'
-                    : 'Активен пакет на 500 ИИ-запросов без срока действия (до 2 устройств)'
-                  : isEn
-                  ? 'Starter package: 100 free AI requests. Top up +500 requests or activate a key anytime'
+                    : 'Package of 500 AI requests (no expiration date, up to 2 devices)'
+                  : isRu
+                  ? 'Стартовый пакет: 100 бесплатных ИИ-запросов. Вы можете пополнить баланс (+500 запросов) или ввести ключ заранее'
                   : isPl
                   ? 'Pakiet startowy: 100 darmowych zapytań AI. Doładuj +500 zapytań lub aktywuj klucz'
-                  : 'Стартовый пакет: 100 бесплатных ИИ-запросов. Вы можете пополнить баланс (+500 запросов) или ввести ключ заранее'}
+                  : 'Starter package: 100 free AI requests. Top up +500 requests or activate a key anytime'}
               </p>
             </div>
           </div>
@@ -582,13 +565,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
           >
             <Sparkles className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
-            <span>
-              {isEn
-                ? 'Top up / Enter Key'
-                : isPl
-                ? 'Doładuj / Wpisz klucz'
-                : 'Пополнить / Ввести ключ'}
-            </span>
+            <span>{t.topUpEnterKeyBtn}</span>
           </button>
         </div>
       </div>
@@ -677,14 +654,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                   );
                 })}
 
-                {/* Добавить новый язык через Gemini */}
+                {/* Добавить новый язык через ИИ */}
                 <button
                   type="button"
                   onClick={onRequestNewLanguage}
                   className="min-h-[42px] flex items-center justify-center gap-1.5 p-2.5 rounded-xl border border-dashed border-purple-500/50 bg-purple-950/20 hover:bg-purple-900/30 text-purple-300 text-xs font-semibold transition active:scale-95"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
-                  <span>+ Gemini AI</span>
+                  <span>{t.addLanguageBtn}</span>
                 </button>
               </div>
             </div>
@@ -806,13 +783,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               >
                 <div className="flex items-center gap-2 font-bold text-xs text-white">
                   <AlignLeft className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>
-                    {isEn
-                      ? 'Compact Bars'
-                      : isPl
-                      ? 'Kompaktowe paski'
-                      : 'Компактные полосы'}
-                  </span>
+                  <span>{t.compactBarsLabel}</span>
                 </div>
                 {currentNutrientMode === 'compact' && (
                   <Check className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -830,13 +801,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               >
                 <div className="flex items-center gap-2 font-bold text-xs text-white">
                   <CircleDot className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>
-                    {isEn
-                      ? 'Circular Ring'
-                      : isPl
-                      ? 'Widok kołowy'
-                      : 'Круговой кружок'}
-                  </span>
+                  <span>{t.circularRingLabel}</span>
                 </div>
                 {currentNutrientMode === 'circles' && (
                   <Check className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -934,18 +899,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               <h4
                 className={`text-sm sm:text-base font-bold leading-snug break-words ${themeStyles.textPrimary} group-hover:text-amber-400 transition-colors`}
               >
-                {isEn
-                  ? 'Sound Settings'
-                  : isPl
-                  ? 'Ustawienia dźwięku'
-                  : 'Настройка звука'}
+                {t.secSoundSettings}
               </h4>
               <p className="text-xs leading-relaxed text-slate-400 break-words">
-                {isEn
-                  ? 'Choose melodies for cooking timers and meal reminders, adjust volume and phone vibration'
-                  : isPl
-                  ? 'Wybierz melodie dla minutnika gotowania i przypomnień o posiłkach, głośność i wibracje'
-                  : 'Выбор разных мелодий при готовке и при приёмах пищи, громкость и вибрация на телефоне'}
+                {t.secSoundSettingsSub}
               </p>
               <div className="pt-1">
                 <span className="inline-flex items-center text-[11px] font-mono tabular-nums px-2.5 py-0.5 rounded-lg bg-slate-800/90 border border-slate-700 text-amber-300 font-semibold">
@@ -1244,18 +1201,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               <h4
                 className={`text-sm sm:text-base font-bold leading-snug break-words ${themeStyles.textPrimary} group-hover:text-teal-400 transition-colors`}
               >
-                {isEn
-                  ? 'Export & Import'
-                  : isPl
-                  ? 'Eksport i Import'
-                  : 'Экспорт и импорт'}
+                {t.secExportImport}
               </h4>
               <p className="text-xs leading-relaxed text-slate-400 break-words">
-                {isEn
-                  ? 'Import recipes and export or import your daily menu to transfer to another day or share'
-                  : isPl
-                  ? 'Import przepisów oraz eksport i import dziennego menu na inny dzień lub do udostępnienia'
-                  : 'Импорт рецептов и импорт-экспорт дневного меню для переноса на другой день или обмена'}
+                {t.secExportImportSub}
               </p>
               <div className="pt-1">
                 <span className="inline-flex items-center text-[11px] font-mono tabular-nums px-2.5 py-0.5 rounded-lg bg-slate-800/90 border border-slate-700 text-teal-300 font-semibold">
@@ -1730,14 +1679,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               <h4
                 className={`text-sm sm:text-base font-bold leading-snug break-words ${themeStyles.textPrimary} group-hover:text-sky-400 transition-colors`}
               >
-                {isEn ? 'Feedback & Support' : isPl ? 'Kontakt i opinie' : 'Обратная связь'}
+                {t.secFeedback}
               </h4>
               <p className="text-xs leading-relaxed text-slate-400 break-words">
-                {isEn
-                  ? 'Questions, suggestions, or support via Telegram and Email'
-                  : isPl
-                  ? 'Pytania, sugestie lub wsparcie przez Telegram i Email'
-                  : 'Вопросы, предложения и поддержка в Telegram и по электронной почте'}
+                {t.secFeedbackSub}
               </p>
             </div>
           </div>

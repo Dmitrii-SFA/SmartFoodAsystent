@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserConfig, LanguageOption } from '../types/config';
 import { ThemeStyles } from '../utils/themeHelper';
+import { getUITranslations } from '../utils/translations';
 import { Globe, Check, ChevronDown, Sparkles } from 'lucide-react';
 
 interface LanguageSelectorProps {
@@ -20,7 +21,9 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
   const [alignLeft, setAlignLeft] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const activeCode = (config.language?.code || 'ru').slice(0, 2).toUpperCase();
+  const langCode = config.language?.code || 'ru';
+  const t = getUITranslations(langCode, config.language?.labels);
+  const activeCode = langCode.slice(0, 2).toUpperCase();
   const languages: LanguageOption[] = config.installedLanguages || [];
 
   // Deduplicate languages by 2-letter code
@@ -34,24 +37,11 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
     }
   });
 
-  // Current active language option
-  const currentLang = uniqueLanguages.find(
-    (l) => l.code.slice(0, 2).toUpperCase() === activeCode
-  ) || {
-    code: activeCode.toLowerCase(),
-    name: activeCode,
-    nativeName: activeCode,
-    labels: config.language.labels,
-  };
-
   // Check screen position when opening to prevent overflowing off-screen
   useEffect(() => {
     if (isOpen && dropdownRef.current) {
       const rect = dropdownRef.current.getBoundingClientRect();
       const viewportWidth = window.innerWidth;
-      // Dropdown width is ~224px (w-56).
-      // If opening towards the right (left-0) fits in the viewport, prefer left-0.
-      // Otherwise align right-0 to stay inside screen bounds.
       setAlignLeft(rect.left + 230 <= viewportWidth);
     }
   }, [isOpen]);
@@ -89,13 +79,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
           } mt-2 w-56 max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-700/80 bg-slate-900/95 shadow-2xl p-2 z-50 backdrop-blur-2xl ring-1 ring-white/10 animate-in fade-in zoom-in-95 duration-150`}
         >
           <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800 flex items-center justify-between">
-            <span>
-              {activeCode === 'RU'
-                ? 'Выбор языка'
-                : activeCode === 'PL'
-                ? 'Wybór języka'
-                : 'Select Language'}
-            </span>
+            <span>{t.selectLanguageHeader}</span>
             <span className="font-mono text-[10px] text-slate-500">{uniqueLanguages.length}</span>
           </div>
 
@@ -130,7 +114,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
             })}
           </div>
 
-          {/* Add New Language with Gemini Button */}
+          {/* Add New Language Button */}
           <div className="pt-1.5 border-t border-slate-800">
             <button
               type="button"
@@ -140,16 +124,8 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
               }}
               className="w-full flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border border-dashed border-purple-500/50 bg-purple-950/20 hover:bg-purple-900/30 text-purple-300 text-xs font-semibold transition active:scale-95"
             >
-              <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse shrink-0" />
-              <span>
-                + Gemini AI (
-                {activeCode === 'RU'
-                  ? 'Новый язык'
-                  : activeCode === 'PL'
-                  ? 'Nowy język'
-                  : 'New language'}
-                )
-              </span>
+              <Sparkles className="w-3.5 h-3.5 text-yellow-300 shrink-0" />
+              <span>{t.addLanguageBtn}</span>
             </button>
           </div>
         </div>

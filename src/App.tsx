@@ -36,6 +36,7 @@ import {
   WelcomeOnboardingModal,
   hasSeenWelcomeModal,
 } from './components/WelcomeOnboardingModal';
+import { AddLanguageModal } from './components/AddLanguageModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { MealReminderModal } from './components/MealReminderModal';
 import {
@@ -50,6 +51,7 @@ import {
 import { Sparkles, Sliders, Check, RotateCcw } from 'lucide-react';
 import {
   LanguageOption,
+  CustomLanguagePack,
   AppTab,
   LibraryFoodItem,
   RecipeItem,
@@ -327,8 +329,9 @@ export default function App() {
       mealCategories: freshMealCategories,
     }));
 
+    const t = getUITranslations(config.language?.code, config.language?.labels);
     setConfigToast({
-      message: `Профиль «${trimmed}» добавлен!`,
+      message: t.toastProfileAdded.replace('{name}', trimmed),
       visible: true,
     });
     setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 3000);
@@ -364,8 +367,9 @@ export default function App() {
     }
 
     if (targetToDelete) {
+      const t = getUITranslations(config.language?.code, config.language?.labels);
       setConfigToast({
-        message: `Профиль «${targetToDelete.name}» удалён`,
+        message: t.toastProfileDeleted.replace('{name}', targetToDelete.name),
         visible: true,
       });
       setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 3000);
@@ -425,17 +429,35 @@ export default function App() {
     },
   };
 
-  const getPresetProductNames = (langCode: string = 'en'): Record<string, string> => {
+  const getPresetProductNames = (
+    langCode: string = 'en',
+    explicitPresetProducts?: Record<string, string>
+  ): Record<string, string> => {
     const c = (langCode || 'en').slice(0, 2).toLowerCase();
-    const dict = PRESET_PRODUCT_TRANSLATIONS[c] || PRESET_PRODUCT_TRANSLATIONS.en;
+    const matchedLang = (config?.installedLanguages || []).find(
+      (l) => l.code.slice(0, 2).toLowerCase() === c
+    );
+    const customMap = explicitPresetProducts || matchedLang?.customPack?.presetProducts;
+    const dict = {
+      ...(PRESET_PRODUCT_TRANSLATIONS[c] || PRESET_PRODUCT_TRANSLATIONS.en),
+      ...(customMap || {}),
+    };
     return {
       ...dict,
-      'lib-water': getWaterProductName(langCode),
+      'lib-water':
+        customMap?.['lib-water'] ||
+        getWaterProductName(
+          langCode,
+          matchedLang?.labels?.waterProductName || (config?.language?.labels as any)?.waterProductName
+        ),
     };
   };
 
-  const buildDefaultLibrary = (langCode: string = 'en'): LibraryFoodItem[] => {
-    const pNames = getPresetProductNames(langCode);
+  const buildDefaultLibrary = (
+    langCode: string = 'en',
+    explicitPresetProducts?: Record<string, string>
+  ): LibraryFoodItem[] => {
+    const pNames = getPresetProductNames(langCode, explicitPresetProducts);
     return [
       {
         id: 'lib-water',
@@ -696,83 +718,115 @@ export default function App() {
 
   // Recipes state (2 default recipes localized in EN, RU, PL; Borscht uses 2 separate frying pans)
   const STORAGE_KEY_RECIPES = 'pwa_calorie_recipes_v2';
-  const buildDefaultRecipes = (langCode: string = 'en'): RecipeItem[] => {
+  const buildDefaultRecipes = (
+    langCode: string = 'en',
+    explicitCustomPack?: CustomLanguagePack
+  ): RecipeItem[] => {
     const c = (langCode || 'en').slice(0, 2).toLowerCase();
     const isRu = c === 'ru';
     const isPl = c === 'pl';
-    const pNames = getPresetProductNames(langCode);
+    const matchedLang = (config?.installedLanguages || []).find(
+      (l) => l.code.slice(0, 2).toLowerCase() === c
+    );
+    const pack = explicitCustomPack || matchedLang?.customPack;
+    const customRecipes = pack?.recipes;
+    const pNames = getPresetProductNames(langCode, pack?.presetProducts);
 
-    const oatRecipeName = isRu
-      ? 'Овсяноблин с творогом'
-      : isPl
-      ? 'Omlet owsiany z twarogiem'
-      : 'Oatmeal Pancake with Cottage Cheese';
+    const oatRecipeName =
+      customRecipes?.oatRecipeName ||
+      (isRu
+        ? 'Овсяноблин с творогом'
+        : isPl
+        ? 'Omlet owsiany z twarogiem'
+        : 'Oatmeal Pancake with Cottage Cheese');
 
-    const borschtRecipeName = isRu
-      ? 'Классический борщ с говядиной'
-      : isPl
-      ? 'Barszcz ukraiński'
-      : 'Classic Beef Borscht';
+    const borschtRecipeName =
+      customRecipes?.borschtRecipeName ||
+      (isRu
+        ? 'Классический борщ с говядиной'
+        : isPl
+        ? 'Barszcz ukraiński'
+        : 'Classic Beef Borscht');
 
-    const potVesselName = isRu
-      ? 'Кастрюля 4 л (Бульон и основа)'
-      : isPl
-      ? 'Garnek 4L (Bulion i baza)'
-      : 'Pot 4L (Broth & Base)';
+    const potVesselName =
+      customRecipes?.potVesselName ||
+      (isRu
+        ? 'Кастрюля 4 л (Бульон и основа)'
+        : isPl
+        ? 'Garnek 4L (Bulion i baza)'
+        : 'Pot 4L (Broth & Base)');
 
-    const pan1VesselName = isRu
-      ? 'Сковорода №1 (Лук и морковь)'
-      : isPl
-      ? 'Patelnia nr 1 (Cebula i marchew)'
-      : 'Frying Pan #1 (Onion & Carrot)';
+    const pan1VesselName =
+      customRecipes?.pan1VesselName ||
+      (isRu
+        ? 'Сковорода №1 (Лук и морковь)'
+        : isPl
+        ? 'Patelnia nr 1 (Cebula i marchew)'
+        : 'Frying Pan #1 (Onion & Carrot)');
 
-    const pan2VesselName = isRu
-      ? 'Сковорода №2 (Свёкла)'
-      : isPl
-      ? 'Patelnia nr 2 (Buraki)'
-      : 'Frying Pan #2 (Beetroot)';
+    const pan2VesselName =
+      customRecipes?.pan2VesselName ||
+      (isRu
+        ? 'Сковорода №2 (Свёкла)'
+        : isPl
+        ? 'Patelnia nr 2 (Buraki)'
+        : 'Frying Pan #2 (Beetroot)');
 
-    const transferPan1Name = isRu
-      ? `Содержимое: ${pan1VesselName}`
-      : isPl
-      ? `Zawartość: ${pan1VesselName}`
-      : `Contents: ${pan1VesselName}`;
+    const transferPan1Name =
+      customRecipes?.transferPan1Name ||
+      (isRu
+        ? `Содержимое: ${pan1VesselName}`
+        : isPl
+        ? `Zawartość: ${pan1VesselName}`
+        : `Contents: ${pan1VesselName}`);
 
-    const transferPan2Name = isRu
-      ? `Содержимое: ${pan2VesselName}`
-      : isPl
-      ? `Zawartość: ${pan2VesselName}`
-      : `Contents: ${pan2VesselName}`;
+    const transferPan2Name =
+      customRecipes?.transferPan2Name ||
+      (isRu
+        ? `Содержимое: ${pan2VesselName}`
+        : isPl
+        ? `Zawartość: ${pan2VesselName}`
+        : `Contents: ${pan2VesselName}`);
 
-    const regimeSimmer5Name = isRu
-      ? 'Тушение под крышкой (уровень 5/9)'
-      : isPl
-      ? 'Duszenie pod przykryciem (poziom 5/9)'
-      : 'Simmer under lid (level 5/9)';
+    const regimeSimmer5Name =
+      customRecipes?.regimeSimmer5Name ||
+      (isRu
+        ? 'Тушение под крышкой (уровень 5/9)'
+        : isPl
+        ? 'Duszenie pod przykryciem (poziom 5/9)'
+        : 'Simmer under lid (level 5/9)');
 
-    const regimeSimmer3Name = isRu
-      ? 'Томление под крышкой (уровень 3/9)'
-      : isPl
-      ? 'Wolne duszenie pod przykryciem (poziom 3/9)'
-      : 'Gentle simmer under lid (level 3/9)';
+    const regimeSimmer3Name =
+      customRecipes?.regimeSimmer3Name ||
+      (isRu
+        ? 'Томление под крышкой (уровень 3/9)'
+        : isPl
+        ? 'Wolne duszenie pod przykryciem (poziom 3/9)'
+        : 'Gentle simmer under lid (level 3/9)');
 
-    const aiNote = isRu
-      ? 'Насыщенный говяжий бульон томится на медленном огне (3/9). Лук и морковь обжариваются на первой сковороде, а свёкла готовится отдельно на второй сковороде: 2 мин на сильном огне (9/9), затем 7 мин под крышкой на среднем (5/9) и ещё 7 мин под крышкой на слабом огне (3/9).'
-      : isPl
-      ? 'Bogaty bulion wołowy gotowany na wolnym ogniu (3/9). Cebula i marchew smażone na pierwszej patelni, a buraki osobno na drugiej patelni: 2 min na dużym ogniu (9/9), następnie 7 min pod przykryciem na poziomie 5/9 i kolejne 7 min pod przykryciem na poziomie 3/9.'
-      : 'Rich beef broth simmered gently (level 3/9). Onion and carrot are sautéed in Frying Pan #1, while beetroot is cooked separately in Frying Pan #2: 2 min sear on high heat (9/9), then 7 min covered at level 5/9, and 7 more min covered at level 3/9.';
+    const aiNote =
+      customRecipes?.aiNote ||
+      (isRu
+        ? 'Насыщенный говяжий бульон томится на медленном огне (3/9). Лук и морковь обжариваются на первой сковороде, а свёкла готовится отдельно на второй сковороде: 2 мин на сильном огне (9/9), затем 7 мин под крышкой на среднем (5/9) и ещё 7 мин под крышкой на слабом огне (3/9).'
+        : isPl
+        ? 'Bogaty bulion wołowy gotowany na wolnym ogniu (3/9). Cebula i marchew smażone na pierwszej patelni, a buraki osobno na drugiej patelni: 2 min na dużym ogniu (9/9), następnie 7 min pod przykryciem na poziomie 5/9 i kolejne 7 min pod przykryciem na poziomie 3/9.'
+        : 'Rich beef broth simmered gently (level 3/9). Onion and carrot are sautéed in Frying Pan #1, while beetroot is cooked separately in Frying Pan #2: 2 min sear on high heat (9/9), then 7 min covered at level 5/9, and 7 more min covered at level 3/9.');
 
-    const aiImpact = isRu
-      ? 'Отдельное томление свёклы под крышкой в два этапа сохраняет бетанин и насыщенный рубиновый цвет, а бета-каротин из моркови переходит в липидную фракцию масла.'
-      : isPl
-      ? 'Osobne duszenie buraków pod przykryciem w dwóch etapach zachowuje betaninę i głęboki rubinowy kolor, a beta-karoten z marchwi rozpuszcza się w tłuszczu.'
-      : 'Separate two-stage covered simmering of beetroot preserves betanin and deep ruby color, while beta-carotene from carrots dissolves into the lipid fraction for optimal absorption.';
+    const aiImpact =
+      customRecipes?.aiImpact ||
+      (isRu
+        ? 'Отдельное томление свёклы под крышкой в два этапа сохраняет бетанин и насыщенный рубиновый цвет, а бета-каротин из моркови переходит в липидную фракцию масла.'
+        : isPl
+        ? 'Osobne duszenie buraków pod przykryciem w dwóch etapach zachowuje betaninę i głęboki rubinowy kolor, a beta-karoten z marchwi rozpuszcza się w tłuszczu.'
+        : 'Separate two-stage covered simmering of beetroot preserves betanin and deep ruby color, while beta-carotene from carrots dissolves into the lipid fraction for optimal absorption.');
 
-    const aiTips = isRu
-      ? 'После выключения плиты дайте борщу настояться под крышкой 20 минут для объединения вкусов.'
-      : isPl
-      ? 'Po wyłączeniu kuchenki odstaw barszcz ukraiński pod przykryciem na 20 minut, aby smaki się przegryzły.'
-      : 'Let the borscht rest covered for 20 minutes after turning off the stove to balance the flavors.';
+    const aiTips =
+      customRecipes?.aiTips ||
+      (isRu
+        ? 'После выключения плиты дайте борщу настояться под крышкой 20 минут для объединения вкусов.'
+        : isPl
+        ? 'Po wyłączeniu kuchenki odstaw barszcz ukraiński pod przykryciem na 20 minut, aby smaki się przegryzły.'
+        : 'Let the borscht rest covered for 20 minutes after turning off the stove to balance the flavors.');
 
     return [
       {
@@ -896,10 +950,14 @@ export default function App() {
   };
 
   // Helper to translate default recipes and upgrade Borscht to the 2-pan beetroot process
-  const localizeRecipesForLanguage = (existingRecipes: RecipeItem[], langCode: string = 'en'): RecipeItem[] => {
-    const freshDefaults = buildDefaultRecipes(langCode);
+  const localizeRecipesForLanguage = (
+    existingRecipes: RecipeItem[],
+    langCode: string = 'en',
+    explicitCustomPack?: CustomLanguagePack
+  ): RecipeItem[] => {
+    const freshDefaults = buildDefaultRecipes(langCode, explicitCustomPack);
     const defaultMap = new Map(freshDefaults.map((r) => [r.id, r]));
-    const presetNames = getPresetProductNames(langCode);
+    const presetNames = getPresetProductNames(langCode, explicitCustomPack?.presetProducts);
 
     return existingRecipes.map((rec) => {
       // Replace built-in default recipes with their localized & updated version
@@ -1015,8 +1073,9 @@ export default function App() {
       addedAt: Date.now(),
     };
     setShoppingList((prev) => [newItem, ...prev]);
+    const t = getUITranslations(config.language?.code, config.language?.labels);
     setConfigToast({
-      message: `«${trimmedName}» добавлено в список покупок!`,
+      message: t.toastAddedToShoppingList.replace('{name}', trimmedName),
       visible: true,
     });
     setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 3000);
@@ -1034,6 +1093,7 @@ export default function App() {
 
   // Modals & Drawers state
   const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState<boolean>(() => !hasSeenWelcomeModal());
+  const [isAddLanguageModalOpen, setIsAddLanguageModalOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
@@ -1083,8 +1143,9 @@ export default function App() {
     }
 
     setIsResetModalOpen(false);
+    const t = getUITranslations(restoredConfig.language.code, restoredConfig.language.labels);
     setConfigToast({
-      message: 'Первоначальная программа полностью восстановлена!',
+      message: t.toastProgramRestored,
       visible: true,
     });
     setTimeout(() => {
@@ -1107,11 +1168,12 @@ export default function App() {
     const activatedKey = checkAndActivateUrlAccessKey();
     if (activatedKey) {
       verifyAndActivateAccessKey(activatedKey).then((res) => {
+        const t = getUITranslations(config.language?.code, config.language?.labels);
         if (!res.valid) {
           saveAccessKey('');
           setApiKey('');
           setConfigToast({
-            message: res.error || 'Не удалось активировать ключ из ссылки',
+            message: res.error || t.toastKeyActivationFailed,
             visible: true,
           });
           setIsApiKeyModalOpen(true);
@@ -1122,10 +1184,12 @@ export default function App() {
           const addedCarry = res.carryoverAdded ?? 0;
           setConfigToast({
             message: res.isMaster
-              ? 'Мастер-ключ владельца активирован! Полный безлимит.'
+              ? t.toastMasterKeyActivated
               : addedCarry > 0
-              ? `Ключ активирован! Остаток (+${addedCarry}) прибавлен к 500 → доступно: ${totalAvail}`
-              : `Пакет на 500 ИИ-запросов успешно активирован! (Доступно: ${totalAvail})`,
+              ? t.toastKeyActivatedCarryover
+                  .replace('{carry}', String(addedCarry))
+                  .replace('{total}', String(totalAvail))
+              : t.toastKeyPackageActivated.replace('{total}', String(totalAvail)),
             visible: true,
           });
         }
@@ -1144,21 +1208,13 @@ export default function App() {
     const updatedQuota = getQuotaStatus();
     setDemoRequestsUsed(updatedQuota.usedRequests);
     if (trimmed) {
-      const c = (config.language?.code || 'en').toLowerCase();
-      const isRu = c.startsWith('ru');
-      const isPl = c.startsWith('pl');
+      const t = getUITranslations(config.language?.code, config.language?.labels);
       setConfigToast({
         message: updatedQuota.isMasterKey
-          ? isRu
-            ? 'Мастер-ключ активирован! Полный безлимит запросов.'
-            : isPl
-            ? 'Klucz główny aktywowany! Pełny brak limitów.'
-            : 'Master key activated! Unlimited requests.'
-          : isRu
-          ? `Ключ активирован! Доступно ИИ-запросов: ${updatedQuota.remainingRequests} из ${updatedQuota.packageLimit}.`
-          : isPl
-          ? `Klucz aktywowany! Dostępne zapytania AI: ${updatedQuota.remainingRequests} z ${updatedQuota.packageLimit}.`
-          : `Key activated! Available AI requests: ${updatedQuota.remainingRequests} of ${updatedQuota.packageLimit}.`,
+          ? t.toastMasterKeyActivated
+          : t.toastKeyActivatedRemaining
+              .replace('{remaining}', String(updatedQuota.remainingRequests))
+              .replace('{limit}', String(updatedQuota.packageLimit)),
         visible: true,
       });
       setTimeout(() => {
@@ -1262,9 +1318,10 @@ export default function App() {
   // Revert config
   const handleRevertConfig = () => {
     if (previousConfig) {
+      const t = getUITranslations(previousConfig.language?.code, previousConfig.language?.labels);
       setConfig(previousConfig);
       setPreviousConfig(null);
-      setConfigToast({ message: 'Предыдущие настройки восстановлены', visible: true });
+      setConfigToast({ message: t.toastPreviousSettingsRestored, visible: true });
       setTimeout(() => {
         setConfigToast((prev) => ({ ...prev, visible: false }));
       }, 3000);
@@ -1290,11 +1347,32 @@ export default function App() {
 
     // Use canonical protected labels if it's ru, en, or pl to fix any prior modifications
     const canonicalProtected = DEFAULT_INSTALLED_LANGUAGES.find((l) => l.code === code2);
+    const existingSavedLang = (config.installedLanguages || []).find(
+      (l) => l.code.slice(0, 2).toLowerCase() === code2
+    );
+    const customPack = canonicalProtected
+      ? undefined
+      : lang.customPack || existingSavedLang?.customPack;
     const targetLabels = canonicalProtected ? canonicalProtected.labels : lang.labels;
-    const presetNames = getPresetProductNames(code2);
+    const presetNames = getPresetProductNames(code2, customPack?.presetProducts);
 
     setConfig((prev) => {
-      const translated = translateConfigItems(prev, code2);
+      const nextInstalled = prev.installedLanguages?.some(
+        (l) => l.code.slice(0, 2).toLowerCase() === code2
+      )
+        ? prev.installedLanguages.map((l) =>
+            l.code.slice(0, 2).toLowerCase() === code2
+              ? canonicalProtected || { ...l, ...lang, customPack }
+              : l
+          )
+        : [...(prev.installedLanguages || []), { ...lang, customPack }];
+
+      const translated = translateConfigItems(
+        { ...prev, installedLanguages: nextInstalled },
+        code2,
+        customPack
+      );
+
       return {
         ...prev,
         language: {
@@ -1303,11 +1381,7 @@ export default function App() {
         },
         metrics: translated.metrics,
         mealCategories: translated.mealCategories,
-        installedLanguages: prev.installedLanguages?.some(
-          (l) => l.code.slice(0, 2).toLowerCase() === code2
-        )
-          ? prev.installedLanguages
-          : [...(prev.installedLanguages || []), lang],
+        installedLanguages: nextInstalled,
       };
     });
 
@@ -1319,17 +1393,19 @@ export default function App() {
     );
 
     // Translate built-in default recipes & preset ingredients
-    setRecipes((prev) => localizeRecipesForLanguage(prev, code2));
+    setRecipes((prev) => localizeRecipesForLanguage(prev, code2, customPack));
 
     // Translate built-in sample initial day log items and default person name
-    setLogs((prev) => translateInitialDayLogs(prev, code2));
+    setLogs((prev) => translateInitialDayLogs(prev, code2, customPack?.initialDayItems));
     setPeople((prev) =>
       prev.map((p) => {
-        const isDefaultName = ['Me', 'Я', 'Ja'].includes(p.name);
+        const defaultNameCandidate =
+          customPack?.defaultPersonName || getDefaultPersonName(code2);
+        const isDefaultName = ['Me', 'Я', 'Ja', defaultNameCandidate].includes(p.name);
         return {
           ...p,
-          name: p.id === 'default' && isDefaultName ? getDefaultPersonName(code2) : p.name,
-          logs: translateInitialDayLogs(p.logs || {}, code2),
+          name: p.id === 'default' && isDefaultName ? defaultNameCandidate : p.name,
+          logs: translateInitialDayLogs(p.logs || {}, code2, customPack?.initialDayItems),
         };
       })
     );
@@ -1344,7 +1420,7 @@ export default function App() {
   };
 
   const handleRequestNewLanguage = () => {
-    setIsChatOpen(true);
+    setIsAddLanguageModalOpen(true);
   };
 
   // Add food item to daily log AND ensure it is saved in the permanent Food Library
@@ -1405,8 +1481,9 @@ export default function App() {
         },
       };
     });
+    const t = getUITranslations(config.language?.code, config.language?.labels);
     setConfigToast({
-      message: `Вес порции изменён: ${safeGrams} г`,
+      message: t.toastPortionWeightChanged.replace('{grams}', String(safeGrams)),
       visible: true,
     });
     setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 2500);
@@ -1483,8 +1560,9 @@ export default function App() {
       return addedLibItems.length > 0 ? [...addedLibItems, ...prev] : prev;
     });
 
+    const t = getUITranslations(config.language?.code, config.language?.labels);
     setConfigToast({
-      message: `Добавлено ${newItems.length} блюд из чата в дневник!`,
+      message: t.toastMealsAddedFromChat.replace('{count}', String(newItems.length)),
       visible: true,
     });
     setTimeout(() => {
@@ -1520,8 +1598,9 @@ export default function App() {
         },
       };
     });
+    const t = getUITranslations(config.language?.code, config.language?.labels);
     setConfigToast({
-      message: `Разовый приём «${newCat.name}» добавлен для этого дня`,
+      message: t.toastCustomMealAddedForDay.replace('{name}', newCat.name),
       visible: true,
     });
     setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 3000);
@@ -1529,6 +1608,7 @@ export default function App() {
 
   // Delete meal category from daily timeline (single-day or global)
   const handleDeleteMealCategory = (catId: string) => {
+    const t = getUITranslations(config.language?.code, config.language?.labels);
     if (currentDayLog.customDayCategories?.some((c) => c.id === catId)) {
       setLogs((prev) => {
         const day = prev[currentDateStr];
@@ -1542,7 +1622,7 @@ export default function App() {
         };
       });
       setConfigToast({
-        message: 'Разовый приём пищи удален',
+        message: t.toastCustomMealDeleted,
         visible: true,
       });
       setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 3000);
@@ -1553,7 +1633,7 @@ export default function App() {
       const updated = config.mealCategories.filter((c) => c.id !== catId);
       handleApplyConfig(
         { ...config, mealCategories: updated },
-        'Приём пищи удален из расписания'
+        t.toastMealDeletedFromSchedule
       );
     }
   };
@@ -1595,6 +1675,99 @@ export default function App() {
     return () => {
       window.removeEventListener('touchstart', handleUnlock);
       window.removeEventListener('click', handleUnlock);
+    };
+  }, []);
+
+  // Suppress smartphone keyboard autofill accessory bar (Key / Credit Card / Location icons)
+  useEffect(() => {
+    const applyKeyboardAutofillSuppression = (root: ParentNode = document) => {
+      const forms = root.querySelectorAll ? root.querySelectorAll('form') : [];
+      forms.forEach((form) => {
+        if (form.getAttribute('autocomplete') !== 'off') {
+          form.setAttribute('autocomplete', 'off');
+        }
+      });
+
+      const inputs = root.querySelectorAll
+        ? root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea')
+        : [];
+      inputs.forEach((el) => {
+        if (el instanceof HTMLInputElement) {
+          const t = (el.getAttribute('type') || 'text').toLowerCase();
+          if (
+            t === 'checkbox' ||
+            t === 'radio' ||
+            t === 'file' ||
+            t === 'color' ||
+            t === 'range' ||
+            t === 'hidden' ||
+            t === 'date' ||
+            t === 'time'
+          ) {
+            return;
+          }
+          if (t === 'text') {
+            el.setAttribute('type', 'search');
+            if (!el.getAttribute('enterkeyhint')) {
+              el.setAttribute('enterkeyhint', 'done');
+            }
+          } else if (t === 'number') {
+            if (!el.getAttribute('inputmode')) {
+              el.setAttribute('inputmode', 'decimal');
+            }
+          }
+        }
+        el.setAttribute('autocomplete', 'off');
+        el.setAttribute('autocorrect', 'off');
+        el.setAttribute('autocapitalize', 'off');
+        el.setAttribute('spellcheck', 'false');
+        el.setAttribute('aria-autocomplete', 'none');
+        el.setAttribute('data-form-type', 'other');
+        el.setAttribute('data-lpignore', 'true');
+        el.setAttribute('data-1p-ignore', 'true');
+        el.setAttribute('data-bwignore', 'true');
+        if (
+          !el.getAttribute('name') ||
+          /key|token|pass|card|address|name|email/i.test(el.getAttribute('name') || '')
+        ) {
+          el.setAttribute('name', 'sfa_search_q');
+        }
+      });
+    };
+
+    applyKeyboardAutofillSuppression(document);
+
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        applyKeyboardAutofillSuppression(target.parentElement || document);
+      }
+    };
+
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        m.addedNodes.forEach((node) => {
+          if (node instanceof HTMLElement) {
+            if (
+              node.tagName === 'INPUT' ||
+              node.tagName === 'TEXTAREA' ||
+              node.tagName === 'FORM'
+            ) {
+              applyKeyboardAutofillSuppression(node.parentElement || document);
+            } else {
+              applyKeyboardAutofillSuppression(node);
+            }
+          }
+        });
+      }
+    });
+
+    document.addEventListener('focusin', handleFocusIn, true);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      document.removeEventListener('focusin', handleFocusIn, true);
+      observer.disconnect();
     };
   }, []);
 
@@ -1839,31 +2012,34 @@ export default function App() {
       />
 
       {/* Toast Notification when Gemini or User changes userConfig */}
-      {configToast.visible && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 max-w-md w-full px-4 animate-in fade-in slide-in-from-top-4 duration-300">
-          <div className="p-3 rounded-2xl bg-slate-900/95 border border-emerald-500/50 text-white shadow-2xl flex items-center justify-between gap-3 backdrop-blur-md">
-            <div className="flex items-center gap-2.5 text-xs">
-              <span className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400">
-                <Check className="w-4 h-4" />
-              </span>
-              <div>
-                <span className="font-bold text-emerald-300">Конфиг обновлен:</span>{' '}
-                <span className="text-slate-200">{configToast.message}</span>
+      {configToast.visible && (() => {
+        const uiT = getUITranslations(config.language?.code, config.language?.labels);
+        return (
+          <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 max-w-md w-full px-4 animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="p-3 rounded-2xl bg-slate-900/95 border border-emerald-500/50 text-white shadow-2xl flex items-center justify-between gap-3 backdrop-blur-md">
+              <div className="flex items-center gap-2.5 text-xs">
+                <span className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400">
+                  <Check className="w-4 h-4" />
+                </span>
+                <div>
+                  <span className="font-bold text-emerald-300">{uiT.toastUpdatedPrefix}</span>{' '}
+                  <span className="text-slate-200">{configToast.message}</span>
+                </div>
               </div>
-            </div>
 
-            {previousConfig && (
-              <button
-                onClick={handleRevertConfig}
-                className="flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition shrink-0"
-              >
-                <RotateCcw className="w-3 h-3" />
-                <span>Отменить</span>
-              </button>
-            )}
+              {previousConfig && (
+                <button
+                  onClick={handleRevertConfig}
+                  className="flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition shrink-0"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>{uiT.revertChanges}</span>
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Main Content Area switched by activeTab */}
       <main className="flex-1 max-w-5xl w-full mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4">
@@ -1877,6 +2053,7 @@ export default function App() {
           accentColor={config.theme.accentColor}
           borderRadius={config.theme.borderRadius}
           langCode={config.language.code}
+          labels={config.language.labels}
         />
 
         {/* TAB 1: ДНЕВНОЕ МЕНЮ (Стартовая страница) */}
@@ -1950,33 +2127,37 @@ export default function App() {
                 langCode={config.language.code}
                 labels={config.language.labels}
                 onReorderMetrics={(newMetrics) => {
+                  const t = getUITranslations(config.language?.code, config.language?.labels);
                   handleApplyConfig(
                     { ...config, metrics: newMetrics },
-                    'Порядок нутриентов обновлен'
+                    t.toastNutrientOrderUpdated
                   );
                 }}
                 onToggleMetricVisibility={(metricId, show) => {
+                  const t = getUITranslations(config.language?.code, config.language?.labels);
                   const updated = config.metrics.map((m) =>
                     m.id === metricId ? { ...m, showInSummary: show } : m
                   );
                   handleApplyConfig(
                     { ...config, metrics: updated },
-                    show ? 'Нутриент выведен на главный экран' : 'Нутриент скрыт с главного экрана'
+                    show ? t.toastNutrientShownOnMain : t.toastNutrientHiddenFromMain
                   );
                 }}
                 onToggleMetricPrimary={(metricId, isPrimary) => {
+                  const t = getUITranslations(config.language?.code, config.language?.labels);
                   const updated = config.metrics.map((m) =>
                     m.id === metricId ? { ...m, isPrimary } : m
                   );
                   handleApplyConfig(
                     { ...config, metrics: updated },
-                    isPrimary ? 'Нутриент переведен в Основные' : 'Нутриент переведен во Второстепенные'
+                    isPrimary ? t.toastNutrientMovedToPrimary : t.toastNutrientMovedToSecondary
                   );
                 }}
                 onAddCustomMetric={(newMetric) => {
+                  const t = getUITranslations(config.language?.code, config.language?.labels);
                   handleApplyConfig(
                     { ...config, metrics: [...config.metrics, newMetric] },
-                    `Добавлен новый нутриент: ${newMetric.label}`
+                    t.toastNewNutrientAdded.replace('{name}', newMetric.label)
                   );
                 }}
                 onNavigateToNutrientSettings={() => {
@@ -2002,12 +2183,8 @@ export default function App() {
               currentDateStr={currentDateStr}
               waterMl={currentDayLog.waterMl || 0}
               onShareDailyMenu={() => {
-                const c = (config.language?.code || 'ru').toLowerCase();
-                const msg = c.startsWith('en')
-                  ? `Daily menu (${currentDateStr}) copied to clipboard!`
-                  : c.startsWith('pl')
-                  ? `Dzienne menu (${currentDateStr}) skopiowano do schowka!`
-                  : `Дневное меню (${currentDateStr}) скопировано в буфер обмена!`;
+                const t = getUITranslations(config.language?.code, config.language?.labels);
+                const msg = t.toastDailyMenuCopied.replace('{date}', currentDateStr);
                 setConfigToast({ message: msg, visible: true });
                 setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 3000);
               }}
@@ -2044,9 +2221,10 @@ export default function App() {
               preselectedMealCategoryId={preselectedMealCategoryId}
               onClearPreselectedMealCategory={() => setPreselectedMealCategoryId(null)}
               onUpdateMetrics={(newMetrics) => {
+                const t = getUITranslations(config.language?.code, config.language?.labels);
                 handleApplyConfig(
                   { ...config, metrics: newMetrics },
-                  'Настройки нутриентов обновлены'
+                  t.toastNutrientSettingsUpdated
                 );
               }}
               onSaveToLibrary={(newItem) => {
@@ -2076,10 +2254,12 @@ export default function App() {
                   );
                   return [cleanItem, ...filtered];
                 });
+                const t = getUITranslations(config.language?.code, config.language?.labels);
                 setConfigToast({
-                  message: isExistingById
-                    ? `Продукт «${cleanItem.name}» обновлён в списке продуктов!`
-                    : `Продукт «${cleanItem.name}» добавлен в библиотеку!`,
+                  message: (isExistingById
+                    ? t.toastProductUpdatedInLibrary
+                    : t.toastProductAddedToLibrary
+                  ).replace('{name}', cleanItem.name),
                   visible: true,
                 });
                 setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 3000);
@@ -2104,8 +2284,11 @@ export default function App() {
               }}
               onAddFoodToDayLog={(foodItem) => {
                 handleSaveFood(foodItem);
+                const t = getUITranslations(config.language?.code, config.language?.labels);
                 setConfigToast({
-                  message: `«${foodItem.name}» (${foodItem.amountGrams}г) записано в дневник!`,
+                  message: t.toastFoodLoggedToDiary
+                    .replace('{name}', foodItem.name)
+                    .replace('{grams}', String(foodItem.amountGrams)),
                   visible: true,
                 });
                 setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 3000);
@@ -2138,10 +2321,12 @@ export default function App() {
                     ? prev.map((r) => (r.id === savedRecipe.id ? savedRecipe : r))
                     : [savedRecipe, ...prev]
                 );
+                const t = getUITranslations(config.language?.code, config.language?.labels);
                 setConfigToast({
-                  message: isExisting
-                    ? `Изменения в рецепте «${savedRecipe.name}» сохранены!`
-                    : `Рецепт «${savedRecipe.name}» успешно сохранен!`,
+                  message: (isExisting
+                    ? t.toastRecipeChangesSaved
+                    : t.toastRecipeSaved
+                  ).replace('{name}', savedRecipe.name),
                   visible: true,
                 });
                 setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 3000);
@@ -2166,12 +2351,8 @@ export default function App() {
               }}
               onAddToShoppingList={handleAddToShoppingList}
               onShareRecipe={(sharedRecipe) => {
-                const c = (config.language?.code || 'ru').toLowerCase();
-                const msg = c.startsWith('en')
-                  ? `Recipe "${sharedRecipe.name}" copied to clipboard!`
-                  : c.startsWith('pl')
-                  ? `Przepis "${sharedRecipe.name}" skopiowano do schowka!`
-                  : `Рецепт «${sharedRecipe.name}» скопирован в буфер обмена!`;
+                const t = getUITranslations(config.language?.code, config.language?.labels);
+                const msg = t.toastRecipeCopied.replace('{name}', sharedRecipe.name);
                 setConfigToast({ message: msg, visible: true });
                 setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 3000);
               }}
@@ -2250,8 +2431,11 @@ export default function App() {
                   amountGrams: 100,
                   nutrients: per100g,
                 });
+                const t = getUITranslations(config.language?.code, config.language?.labels);
                 setConfigToast({
-                  message: `100 g «${recipe.name}»`,
+                  message: t.toastFoodLoggedToDiary
+                    .replace('{name}', recipe.name)
+                    .replace('{grams}', '100'),
                   visible: true,
                 });
                 setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 3000);
@@ -2290,14 +2474,15 @@ export default function App() {
               totalDemoLimit={TOTAL_DEMO_LIMIT}
               onUpdateThemeMode={handleUpdateThemeMode}
               onUpdateNutrientDisplayMode={(mode) => {
+                const t = getUITranslations(config.language?.code, config.language?.labels);
                 handleApplyConfig(
                   {
                     ...config,
                     theme: { ...config.theme, nutrientDisplayMode: mode },
                   },
                   mode === 'circles'
-                    ? 'Включен круговой вид дневной нормы'
-                    : 'Включены компактные полосы нутриентов'
+                    ? t.toastCircularViewEnabled
+                    : t.toastCompactBarsEnabled
                 );
               }}
               onSelectLanguage={handleSelectLanguage}
@@ -2314,9 +2499,10 @@ export default function App() {
               onOpenResetModal={() => setIsResetModalOpen(true)}
               onOpenConfigModal={() => setIsConfigModalOpen(true)}
               onUpdateMetrics={(newMetrics) => {
+                const t = getUITranslations(config.language?.code, config.language?.labels);
                 handleApplyConfig(
                   { ...config, metrics: newMetrics },
-                  'Дневная норма калорий и БЖУ успешно обновлена!'
+                  t.toastDailyNormUpdated
                 );
               }}
               onUpdateGoalMode={(mode) => {
@@ -2325,18 +2511,20 @@ export default function App() {
                   ...prev,
                   goalMode: mode,
                 }));
+                const t = getUITranslations(config.language?.code, config.language?.labels);
                 const modeLabel =
-                  mode === 'lose' ? 'Похудение' : mode === 'gain' ? 'Набор' : 'Баланс';
+                  mode === 'lose' ? t.goalModeLose : mode === 'gain' ? t.goalModeGain : t.goalModeMaintain;
                 setConfigToast({
-                  message: `Режим цели переключен: ${modeLabel}`,
+                  message: t.toastGoalModeSwitched.replace('{mode}', modeLabel),
                   visible: true,
                 });
                 setTimeout(() => setConfigToast((prev) => ({ ...prev, visible: false })), 2500);
               }}
               onUpdateMealCategories={(newCats) => {
+                const t = getUITranslations(config.language?.code, config.language?.labels);
                 handleApplyConfig(
                   { ...config, mealCategories: newCats },
-                  'Список и порядок приёмов пищи обновлен!'
+                  t.toastMealsOrderUpdated
                 );
               }}
               focusSection={settingsFocusSection}
@@ -2470,7 +2658,10 @@ export default function App() {
         config={config}
         themeStyles={themeStyles}
         onUpdateConfig={handleApplyConfig}
-        onResetToDefault={() => handleApplyConfig(DEFAULT_USER_CONFIG, 'Сброшено к заводским настройкам')}
+        onResetToDefault={() => {
+          const t = getUITranslations(config.language?.code, config.language?.labels);
+          handleApplyConfig(DEFAULT_USER_CONFIG, t.toastResetToDefaults);
+        }}
       />
 
       {/* Annual Access & Paywall Modal («Годовой доступ») */}
@@ -2497,6 +2688,8 @@ export default function App() {
         onClose={() => setIsResetModalOpen(false)}
         onConfirmReset={handleRestoreOriginalProgram}
         themeStyles={themeStyles}
+        langCode={config.language.code}
+        labels={config.language.labels}
       />
 
       {/* One-Time Welcome Onboarding & About Modal */}
@@ -2514,6 +2707,23 @@ export default function App() {
             handleSelectLanguage(targetLang);
           }
         }}
+      />
+
+      {/* Add Language via AI Translation Modal */}
+      <AddLanguageModal
+        isOpen={isAddLanguageModalOpen}
+        onClose={() => setIsAddLanguageModalOpen(false)}
+        langCode={config.language.code}
+        accentColor={config.theme.accentColor}
+        themeStyles={themeStyles}
+        activeMetricIds={(config.metrics || [])
+          .filter((m) => m.showInSummary !== false)
+          .map((m) => m.id)}
+        onLanguageAdded={(newLang) => {
+          handleSelectLanguage(newLang);
+        }}
+        onOpenPaywallModal={() => setIsApiKeyModalOpen(true)}
+        onQuotaUsed={handleIncrementDemoUsage}
       />
     </div>
   );

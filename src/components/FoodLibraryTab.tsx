@@ -179,7 +179,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
   const handleCreateNewNutrient = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newNutrientName.trim()) {
-      setNewNutrientError('Введите название нутриента');
+      setNewNutrientError(t.errEnterNutrientName);
       return;
     }
     setNewNutrientError(null);
@@ -271,7 +271,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
   // AI Name estimation via Cloudflare Worker
   const handleEstimateByName = async () => {
     if (!formName.trim()) {
-      setValidationError('Обязательно введите название продукта перед анализом ИИ!');
+      setValidationError(t.errEnterFoodNameForAi);
       return;
     }
     setValidationError(null);
@@ -296,7 +296,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
       }
       if (data.note) setAnalysisNote(data.note);
     } catch (err: any) {
-      setValidationError(err?.message || 'Не удалось рассчитать нутриенты');
+      setValidationError(err?.message || t.errFailedToCalculateNutrients);
     } finally {
       setIsAnalyzing(false);
     }
@@ -305,11 +305,11 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
   // Photo Analysis (label or dish) via Cloudflare Worker
   const handleAnalyzePhoto = async () => {
     if (!formName.trim()) {
-      setValidationError('Обязательно введите название продукта перед анализом фотографии!');
+      setValidationError(t.errEnterFoodNameForPhoto);
       return;
     }
     if (!imagePreview) {
-      setValidationError('Загрузите или сфотографируйте изображение!');
+      setValidationError(t.errUploadPhotoFirst);
       return;
     }
     setValidationError(null);
@@ -335,7 +335,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
       }
       if (data.confidenceNote) setAnalysisNote(data.confidenceNote);
     } catch (err: any) {
-      setValidationError(err?.message || 'Ошибка распознавания фото');
+      setValidationError(err?.message || t.errPhotoRecognitionFailed);
     } finally {
       setIsAnalyzing(false);
     }
@@ -344,7 +344,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
   const handleSaveProduct = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) {
-      setValidationError('Нельзя сохранить продукт без указания названия!');
+      setValidationError(t.errFoodNameRequiredToSave);
       return;
     }
 
@@ -387,34 +387,8 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
     setQuickLogFood(null);
   };
 
-  const preselectedCategoryObj = preselectedMealCategoryId
-    ? categories.find((c) => c.id === preselectedMealCategoryId)
-    : undefined;
-
   return (
     <div className="space-y-4">
-      {/* Preselected Meal Category Banner when opened from Daily Menu "+ Добавить блюдо" */}
-      {preselectedCategoryObj && (
-        <div className="p-3 rounded-2xl bg-emerald-950/40 border border-emerald-500/40 flex items-center justify-between gap-2 text-xs text-emerald-200">
-          <div className="flex items-center gap-2">
-            <Utensils className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>
-              Добавление продукта для приёма пищи: <b>«{preselectedCategoryObj.name}»</b> — выберите продукт из библиотеки ниже или создайте новый.
-            </span>
-          </div>
-          {onClearPreselectedMealCategory && (
-            <button
-              type="button"
-              onClick={onClearPreselectedMealCategory}
-              className="p-1 text-slate-400 hover:text-white transition shrink-0"
-              title="Скрыть подсказку"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-      )}
-
       {/* Search and Action Bar */}
       <div className={`border ${themeStyles.borderColor} ${themeStyles.cardBg} ${radiusClass} p-3.5 shadow-sm space-y-3`}>
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5">
@@ -471,11 +445,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400 pt-0.5 border-t border-slate-800/60">
-          <span>
-            {t.totalInLibrary} <b>{library.length}</b> {t.productsUnit}
-          </span>
-
+        <div className="flex items-center justify-end gap-2 text-[11px] text-slate-400 pt-0.5 border-t border-slate-800/60">
           <button
             type="button"
             onClick={() => setIsNutrientVisibilityModalOpen(true)}
@@ -716,18 +686,18 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-white">
-                    {editingProductId ? 'Изменить продукт' : 'Добавить продукт в библиотеку'}
+                    {editingProductId ? t.editProductModalTitle : t.addProductModalTitle}
                   </h3>
                   <p className="text-[11px] text-slate-400">
                     {editingProductId
-                      ? 'Ручное изменение названия и нутриентов продукта'
+                      ? t.editProductModalSub
                       : creationMode === 'ai_name'
-                      ? 'Расчет всех нутриентов через ИИ по названию'
+                      ? t.addProductAiNameSub
                       : creationMode === 'photo_label'
-                      ? 'Распознавание КБЖУ с фото этикетки + витамины по названию'
+                      ? t.addProductPhotoLabelSub
                       : creationMode === 'photo_dish'
-                      ? 'Примерная визуальная оценка готового блюда по фото'
-                      : 'Ручной ввод всех значений'}
+                      ? t.addProductPhotoDishSub
+                      : t.addProductManualSub}
                   </p>
                 </div>
               </div>
@@ -754,12 +724,12 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
               {/* Product Name (MANDATORY) */}
               <div>
                 <label className="block text-slate-300 font-bold mb-1">
-                  Название продукта / блюда * <span className="text-red-400">(обязательно)</span>
+                  {t.foodNameMandatoryLabel} <span className="text-red-400">{t.mandatoryBadge}</span>
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="например, Творог рассыпчатый 5%, Протеиновый батончик, Борщ..."
+                  placeholder={t.foodNameInputPlaceholder}
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white font-medium focus:outline-hidden focus:border-emerald-500 text-sm"
@@ -771,14 +741,14 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                 <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/40 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-300">
-                      {creationMode === 'photo_label' ? 'Фото этикетки с КБЖУ' : 'Фото тарелки с едой'}
+                      {creationMode === 'photo_label' ? t.photoLabelHeading : t.photoDishHeading}
                     </span>
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       className="px-2.5 py-1 text-xs rounded-lg border border-purple-500/40 bg-purple-950/40 text-purple-200 hover:bg-purple-900/50"
                     >
-                      {imagePreview ? 'Заменить фото' : 'Выбрать файл / камеру'}
+                      {imagePreview ? t.replacePhotoBtn : t.chooseFileCameraBtn}
                     </button>
                     <input
                       ref={fileInputRef}
@@ -806,12 +776,12 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                         {isAnalyzing ? (
                           <>
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Gemini анализирует изображение...</span>
+                            <span>{t.geminiAnalyzingPhoto}</span>
                           </>
                         ) : (
                           <>
                             <Sparkles className="w-4 h-4" />
-                            <span>Распознать через Gemini Vision</span>
+                            <span>{t.recognizeWithGeminiBtn}</span>
                           </>
                         )}
                       </button>
@@ -831,12 +801,12 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                   {isAnalyzing ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>ИИ рассчитывает нутриенты...</span>
+                      <span>{t.aiCalculatingNutrients}</span>
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4" />
-                      <span>Рассчитать КБЖУ и витамины по названию</span>
+                      <span>{t.calculateMacrosByNameBtn}</span>
                     </>
                   )}
                 </button>
@@ -852,7 +822,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
               {/* Portion Weight */}
               <div>
                 <label className="block text-slate-300 font-medium mb-1">
-                  Вес порции (граммы, по умолчанию 100 г)
+                  {t.defaultPortionWeightLabel}
                 </label>
                 <input
                   type="number"
@@ -881,9 +851,9 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-slate-200 flex items-center gap-1.5">
                       <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                      <span>Основные нутриенты (КБЖУ)</span>
+                      <span>{t.coreNutrientsTitle}</span>
                     </span>
-                    <span className="text-[10px] text-emerald-400/90 font-mono font-medium">обязательные</span>
+                    <span className="text-[10px] text-emerald-400/90 font-mono font-medium">{t.mandatoryPluralBadge}</span>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono">
@@ -960,19 +930,19 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                         className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800 text-xs text-slate-300 hover:text-white transition"
                       >
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold">Дополнительные нутриенты</span>
+                          <span className="font-bold">{t.additionalNutrientsTitle}</span>
                           {filledSecondaryCount > 0 ? (
                             <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-mono font-bold">
-                              заполнено: {filledSecondaryCount}
+                              {t.filledCountBadge} {filledSecondaryCount}
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-400 text-[10px] font-mono">
-                              {secondaryMetricsInForm.length} доступно
+                              {secondaryMetricsInForm.length} {t.availableCountBadge}
                             </span>
                           )}
                         </div>
                         <div className="flex items-center gap-1 text-[11px] text-slate-400 shrink-0">
-                          <span>{isSecondaryNutrientsExpanded ? 'Свернуть' : 'Развернуть'}</span>
+                          <span>{isSecondaryNutrientsExpanded ? t.collapseBtn : t.expandBtn}</span>
                           {isSecondaryNutrientsExpanded ? (
                             <ChevronUp className="w-4 h-4 text-slate-400" />
                           ) : (
@@ -985,9 +955,9 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                         <div className="p-3 rounded-2xl bg-slate-900/40 border border-slate-800/80 space-y-2.5 animate-in fade-in duration-150">
                           <div className="flex items-center justify-between text-xs flex-wrap gap-2">
                             <span className="font-bold text-slate-200 flex items-center gap-1.5">
-                              <span>Витамины, минералы и другие нутриенты</span>
+                              <span>{t.vitaminsAndMineralsTitle}</span>
                               <span className="text-[10px] text-slate-400 font-normal">
-                                ({secondaryMetricsInForm.length} в форме)
+                                ({secondaryMetricsInForm.length} {t.inFormCountSuffix})
                               </span>
                             </span>
 
@@ -1001,7 +971,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                               className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg border border-emerald-500/40 bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 transition active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5" />
-                              <span>Добавить нутриент</span>
+                              <span>{t.addNutrient}</span>
                             </button>
                           </div>
 
@@ -1009,7 +979,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                           {isAddNutrientMenuOpen && (
                             <div className="p-3 rounded-xl bg-slate-800/95 border border-slate-700 space-y-3 animate-in fade-in duration-150">
                               <div className="flex items-center justify-between border-b border-slate-700/80 pb-2">
-                                <span className="text-xs font-bold text-white">Добавить нутриент к продукту:</span>
+                                <span className="text-xs font-bold text-white">{t.addNutrientToProductTitle}</span>
                                 <button
                                   type="button"
                                   onClick={() => setIsAddNutrientMenuOpen(false)}
@@ -1024,7 +994,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                                   {availableToAddMetrics.length > 0 && (
                                     <div>
                                       <span className="text-[11px] text-slate-400 block mb-1.5">
-                                        Выберите из существующих нутриентов:
+                                        {t.selectFromExistingNutrients}
                                       </span>
                                       <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
                                         {availableToAddMetrics.map((m) => (
@@ -1044,14 +1014,14 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                                   )}
 
                                   <div className="pt-2 border-t border-slate-700/60 flex items-center justify-between">
-                                    <span className="text-[11px] text-slate-400">Нужного нутриента нет в списке?</span>
+                                    <span className="text-[11px] text-slate-400">{t.nutrientNotFoundQuestion}</span>
                                     <button
                                       type="button"
                                       onClick={() => setIsCreatingNutrientMode(true)}
                                       className="flex items-center gap-1 text-[11px] font-bold text-purple-300 hover:text-purple-200"
                                     >
                                       <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                                      <span>+ Создать новый нутриент</span>
+                                      <span>{t.createNewNutrientBtn}</span>
                                     </button>
                                   </div>
                                 </div>
@@ -1061,14 +1031,14 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                                   <div className="flex items-center justify-between">
                                     <span className="text-xs font-bold text-purple-300 flex items-center gap-1">
                                       <Sparkles className="w-3.5 h-3.5" />
-                                      <span>Создание нового нутриента</span>
+                                      <span>{t.creatingNewNutrientTitle}</span>
                                     </span>
                                     <button
                                       type="button"
                                       onClick={() => setIsCreatingNutrientMode(false)}
                                       className="text-[10px] text-slate-400 hover:text-slate-200"
                                     >
-                                      ← Назад к выбору
+                                      {t.backToSelectionBtn}
                                     </button>
                                   </div>
 
@@ -1080,11 +1050,11 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
 
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     <div>
-                                      <label className="block text-[10px] text-slate-400 mb-0.5">Название нутриента *</label>
+                                      <label className="block text-[10px] text-slate-400 mb-0.5">{t.nutrientNameRequiredLabel}</label>
                                       <input
                                         type="text"
                                         required
-                                        placeholder="например: Омега-3, Кофеин, Креатин"
+                                        placeholder={t.nutrientNamePlaceholder}
                                         value={newNutrientName}
                                         onChange={(e) => setNewNutrientName(e.target.value)}
                                         className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white"
@@ -1092,20 +1062,20 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                                     </div>
                                     <div className="grid grid-cols-2 gap-1.5">
                                       <div>
-                                        <label className="block text-[10px] text-slate-400 mb-0.5">Единица</label>
+                                        <label className="block text-[10px] text-slate-400 mb-0.5">{t.unitLabel}</label>
                                         <select
                                           value={newNutrientUnit}
                                           onChange={(e) => setNewNutrientUnit(e.target.value)}
                                           className="w-full px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white"
                                         >
-                                          <option value="г">г (граммы)</option>
-                                          <option value="мг">мг (миллиграммы)</option>
-                                          <option value="мкг">мкг (микрограммы)</option>
-                                          <option value="мл">мл (миллилитры)</option>
+                                          <option value="г">{t.unitGram}</option>
+                                          <option value="мг">{t.unitMg}</option>
+                                          <option value="мкг">{t.unitMcg}</option>
+                                          <option value="мл">{t.unitMl}</option>
                                         </select>
                                       </div>
                                       <div>
-                                        <label className="block text-[10px] text-slate-400 mb-0.5">Суточная норма</label>
+                                        <label className="block text-[10px] text-slate-400 mb-0.5">{t.dailyNormPlaceholder}</label>
                                         <input
                                           type="number"
                                           value={newNutrientTarget}
@@ -1119,7 +1089,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
 
                                   <div className="flex items-center justify-between pt-1">
                                     <div className="flex items-center gap-1.5">
-                                      <span className="text-[10px] text-slate-400">Цвет:</span>
+                                      <span className="text-[10px] text-slate-400">{t.colorLabel}</span>
                                       {['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#eab308', '#06b6d4'].map((col) => (
                                         <button
                                           key={col}
@@ -1135,7 +1105,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                                       type="submit"
                                       className="px-3 py-1.5 text-xs font-bold rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition shadow-xs"
                                     >
-                                      Создать и привязать
+                                      {t.createAndAttachBtn}
                                     </button>
                                   </div>
                                 </form>
@@ -1163,7 +1133,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                                           type="button"
                                           onClick={() => handleRemoveMetricFromForm(metric.id)}
                                           className="p-0.5 text-slate-500 hover:text-red-400"
-                                          title="Убрать нутриент из этого продукта"
+                                          title={t.removeNutrientFromProductTitle}
                                         >
                                           <X className="w-3 h-3" />
                                         </button>
@@ -1199,7 +1169,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                             </div>
                           ) : (
                             <div className="text-center py-2 text-[11px] text-slate-500 italic">
-                              Дополнительные нутриенты не выбраны. Нажмите «+ Добавить нутриент» выше.
+                              {t.noAdditionalNutrientsSelected}
                             </div>
                           )}
                         </div>
@@ -1226,7 +1196,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                   className="min-h-[40px] px-4 py-2 text-xs font-bold rounded-xl text-white shadow-md transition active:scale-95"
                   style={{ backgroundColor: accentColor }}
                 >
-                  {editingProductId ? 'Сохранить изменения' : t.saveToLibraryBtn}
+                  {editingProductId ? t.saveChangesButton : t.saveToLibraryBtn}
                 </button>
               </div>
             </form>
@@ -1379,8 +1349,8 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
               <div className="flex items-center gap-2">
                 <SlidersHorizontal className="w-4 h-4 text-cyan-400" />
                 <div>
-                  <h3 className="text-sm font-bold text-white">Отображение нутриентов в карточках</h3>
-                  <p className="text-[11px] text-slate-400">Настройте, что показывать во 2-й и 3-й строках продуктов</p>
+                  <h3 className="text-sm font-bold text-white">{t.nutrientCardsModalTitle}</h3>
+                  <p className="text-[11px] text-slate-400">{t.nutrientCardsModalSub}</p>
                 </div>
               </div>
               <button
@@ -1395,10 +1365,10 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
             {/* Explanation Note */}
             <div className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60 text-[11px] text-slate-300 space-y-1">
               <div>
-                🛡️ <b className="text-white">Строка 1 (базовая):</b> Калории, Белки, Жиры и Углеводы всегда зафиксированы и отображаются первыми.
+                🛡️ <b className="text-white">{t.nutrientCardsRow1Title}</b> {t.nutrientCardsRow1Desc}
               </div>
               <div>
-                ✨ <b className="text-white">Строки 2 и 3:</b> Включайте или скрывайте дополнительные нутриенты. Например, витамин С можно отслеживать в дневной норме, но скрыть в карточках продуктов, чтобы они оставались компактными.
+                ✨ <b className="text-white">{t.nutrientCardsRow2Title}</b> {t.nutrientCardsRow2Desc}
               </div>
             </div>
 
@@ -1426,7 +1396,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                     {isCore ? (
                       <span className="text-[10px] font-semibold text-emerald-400 flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-950/40 border border-emerald-500/30">
                         <ShieldCheck className="w-3 h-3" />
-                        <span>Всегда в стр. 1</span>
+                        <span>{t.alwaysInRow1Badge}</span>
                       </span>
                     ) : (
                       <button
@@ -1441,12 +1411,12 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                         {isShown ? (
                           <>
                             <Eye className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>Показывать</span>
+                            <span>{t.showBtn}</span>
                           </>
                         ) : (
                           <>
                             <EyeOff className="w-3.5 h-3.5 text-slate-500" />
-                            <span>Скрыть</span>
+                            <span>{t.hideBtn}</span>
                           </>
                         )}
                       </button>
@@ -1464,7 +1434,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
                 className="px-4 py-2 text-xs font-bold rounded-xl text-white shadow-xs"
                 style={{ backgroundColor: accentColor }}
               >
-                Готово
+                {t.doneBtn}
               </button>
             </div>
           </div>

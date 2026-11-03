@@ -24,6 +24,7 @@ import {
   Pill,
 } from 'lucide-react';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { getUITranslations } from '../utils/translations';
 
 interface MealCategoriesManagerProps {
   categories: MealCategoryConfig[];
@@ -43,10 +44,12 @@ export const MealCategoriesManager: React.FC<MealCategoriesManagerProps> = ({
   accentColor,
   borderRadius,
   langCode = 'ru',
+  labels,
   isCollapsed = false,
   onToggleCollapse,
   onUpdateCategories,
 }) => {
+  const t = getUITranslations(langCode, labels);
   const [newLabel, setNewLabel] = useState('');
   const [newIcon, setNewIcon] = useState('🥗');
   const [newRatio, setNewRatio] = useState('15');
@@ -88,14 +91,7 @@ export const MealCategoriesManager: React.FC<MealCategoriesManagerProps> = ({
         ? ({ ...cat, visible: (cat as any).visible === false } as MealCategoryConfig)
         : cat
     );
-    onUpdateCategories(
-      updated,
-      isEn
-        ? 'Meal category visibility updated'
-        : isPl
-        ? 'Widoczność posiłków zaktualizowana'
-        : 'Видимость приёма пищи обновлена'
-    );
+    onUpdateCategories(updated, t.toastMealParamsUpdated);
   };
 
   const handleChangeField = (
@@ -107,14 +103,7 @@ export const MealCategoriesManager: React.FC<MealCategoriesManagerProps> = ({
       requestNotificationIfNeeded();
     }
     const updated = sorted.map((cat) => (cat.id === id ? { ...cat, [field]: value } : cat));
-    onUpdateCategories(
-      updated,
-      isEn
-        ? 'Meal categories updated'
-        : isPl
-        ? 'Posiłki zaktualizowane'
-        : 'Параметры приёма пищи обновлены'
-    );
+    onUpdateCategories(updated, t.toastMealParamsUpdated);
   };
 
   const handleUpdateTimeAndReminder = (
@@ -134,14 +123,7 @@ export const MealCategoriesManager: React.FC<MealCategoriesManagerProps> = ({
           }
         : cat
     );
-    onUpdateCategories(
-      updated,
-      isEn
-        ? 'Meal time & reminder updated'
-        : isPl
-        ? 'Godzina i przypomnienie zaktualizowane'
-        : 'Время и напоминание приёма пищи обновлены'
-    );
+    onUpdateCategories(updated, t.toastMealTimeReminderUpdated);
   };
 
   const handleMove = (idx: number, dir: -1 | 1) => {
@@ -150,22 +132,12 @@ export const MealCategoriesManager: React.FC<MealCategoriesManagerProps> = ({
     const copy = [...sorted];
     const [moved] = copy.splice(idx, 1);
     copy.splice(target, 0, moved);
-    onUpdateCategories(
-      copy,
-      isEn
-        ? 'Meal order updated'
-        : isPl
-        ? 'Kolejność posiłków zmieniona'
-        : 'Порядок приёмов пищи изменён'
-    );
+    onUpdateCategories(copy, t.toastMealsOrderUpdated);
   };
 
   const handleDelete = (id: string) => {
     const filtered = sorted.filter((cat) => cat.id !== id);
-    onUpdateCategories(
-      filtered,
-      isEn ? 'Meal category deleted' : isPl ? 'Posiłek usunięty' : 'Приём пищи удалён'
-    );
+    onUpdateCategories(filtered, t.toastMealDeletedFromSchedule);
   };
 
   const handleAdd = (e: React.FormEvent) => {

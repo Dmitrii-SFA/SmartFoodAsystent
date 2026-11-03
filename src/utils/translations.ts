@@ -280,6 +280,161 @@ export interface ExtendedLocalizationLabels extends LocalizationLabels {
   productLabel: string;
   howMuchToBuyLabel: string;
   addToListButton: string;
+
+  // Extended Language & Settings keys
+  addLanguageBtn: string;
+  selectLanguageHeader: string;
+  aboutAppBtn: string;
+  secBalanceTitle: string;
+  infoBtn: string;
+  topUpEnterKeyBtn: string;
+  secSoundSettings: string;
+  secSoundSettingsSub: string;
+  secExportImport: string;
+  secExportImportSub: string;
+  secFeedback: string;
+  secFeedbackSub: string;
+
+  // Toast notifications & popups
+  toastUpdatedPrefix: string;
+  toastProfileAdded: string;
+  toastProfileDeleted: string;
+  toastAddedToShoppingList: string;
+  toastProgramRestored: string;
+  toastKeyActivationFailed: string;
+  toastMasterKeyActivated: string;
+  toastKeyActivatedCarryover: string;
+  toastKeyPackageActivated: string;
+  toastKeyActivatedRemaining: string;
+  toastPreviousSettingsRestored: string;
+  toastPortionWeightChanged: string;
+  toastMealsAddedFromChat: string;
+  toastCustomMealAddedForDay: string;
+  toastCustomMealDeleted: string;
+  toastMealDeletedFromSchedule: string;
+  toastNutrientOrderUpdated: string;
+  toastNutrientShownOnMain: string;
+  toastNutrientHiddenFromMain: string;
+  toastNutrientMovedToPrimary: string;
+  toastNutrientMovedToSecondary: string;
+  toastNewNutrientAdded: string;
+  toastDailyMenuCopied: string;
+  toastNutrientSettingsUpdated: string;
+  toastProductUpdatedInLibrary: string;
+  toastProductAddedToLibrary: string;
+  toastFoodLoggedToDiary: string;
+  toastRecipeChangesSaved: string;
+  toastRecipeSaved: string;
+  toastRecipeCopied: string;
+  toastCircularViewEnabled: string;
+  toastCompactBarsEnabled: string;
+  toastDailyNormUpdated: string;
+  toastGoalModeSwitched: string;
+  goalModeLose: string;
+  goalModeGain: string;
+  goalModeMaintain: string;
+  toastMealsOrderUpdated: string;
+  toastResetToDefaults: string;
+  toastNutrientVisibilityUpdated: string;
+  toastNutrientPriorityUpdated: string;
+  toastNutrientParamsUpdated: string;
+  toastNutrientDeleted: string;
+  toastMealParamsUpdated: string;
+  toastMealTimeReminderUpdated: string;
+
+  // Person & Profile popups
+  addPersonTitle: string;
+  personNamePlaceholder: string;
+  deletePersonTitle: string;
+
+  // FoodLibrary Add/Edit Product & Nutrient Visibility Modals
+  editProductModalTitle: string;
+  addProductModalTitle: string;
+  editProductModalSub: string;
+  addProductAiNameSub: string;
+  addProductPhotoLabelSub: string;
+  addProductPhotoDishSub: string;
+  addProductManualSub: string;
+  foodNameMandatoryLabel: string;
+  mandatoryBadge: string;
+  foodNameInputPlaceholder: string;
+  photoLabelHeading: string;
+  photoDishHeading: string;
+  replacePhotoBtn: string;
+  chooseFileCameraBtn: string;
+  geminiAnalyzingPhoto: string;
+  recognizeWithGeminiBtn: string;
+  aiCalculatingNutrients: string;
+  calculateMacrosByNameBtn: string;
+  defaultPortionWeightLabel: string;
+  coreNutrientsTitle: string;
+  mandatoryPluralBadge: string;
+  additionalNutrientsTitle: string;
+  filledCountBadge: string;
+  availableCountBadge: string;
+  collapseBtn: string;
+  expandBtn: string;
+  vitaminsAndMineralsTitle: string;
+  inFormCountSuffix: string;
+  addNutrientToProductTitle: string;
+  selectFromExistingNutrients: string;
+  nutrientNotFoundQuestion: string;
+  createNewNutrientBtn: string;
+  creatingNewNutrientTitle: string;
+  backToSelectionBtn: string;
+  nutrientNameRequiredLabel: string;
+  unitLabel: string;
+  colorLabel: string;
+  createAndAttachBtn: string;
+  removeNutrientFromProductTitle: string;
+  noAdditionalNutrientsSelected: string;
+  errEnterNutrientName: string;
+  errEnterFoodNameForAi: string;
+  errFailedToCalculateNutrients: string;
+  errEnterFoodNameForPhoto: string;
+  errUploadPhotoFirst: string;
+  errPhotoRecognitionFailed: string;
+  errFoodNameRequiredToSave: string;
+  nutrientCardsModalTitle: string;
+  nutrientCardsModalSub: string;
+  nutrientCardsRow1Title: string;
+  nutrientCardsRow1Desc: string;
+  nutrientCardsRow2Title: string;
+  nutrientCardsRow2Desc: string;
+  alwaysInRow1Badge: string;
+  showBtn: string;
+  hideBtn: string;
+
+  // ResetConfirmModal & ConfigJsonModal
+  resetModalTitle: string;
+  resetModalSubtitle: string;
+  resetModalWhatRestored: string;
+  resetModalItem1: string;
+  resetModalItem2: string;
+  resetModalItem3: string;
+  resetModalItem4: string;
+  resetModalItem5: string;
+  resetModalClearLogsLabel: string;
+  resetModalClearLogsHint: string;
+  resetModalConfirmBtn: string;
+  copiedBadge: string;
+  copyBtn: string;
+  closeBtn: string;
+
+  // Recipes & Cooking Timer Modal
+  errEnterDishNameForAi: string;
+  aiChefRecipeReadyBanner: string;
+  errGenerateRecipeFailed: string;
+  shareRecipeBtnTitle: string;
+  timerPrepareByMinute: string;
+  timerTestSoundTitle: string;
+  timerStepCompleted: string;
+  timerNextBtn: string;
+  timerFinishBtn: string;
+  timerPauseBtn: string;
+  timerResumeBtn: string;
+  timerStartBtn: string;
+  timerResetStepTitle: string;
 }
 
 export const COMPLETE_RUSSIAN_LABELS: ExtendedLocalizationLabels = {
@@ -587,6 +742,161 @@ export const COMPLETE_RUSSIAN_LABELS: ExtendedLocalizationLabels = {
   productLabel: 'Выбранный продукт:',
   howMuchToBuyLabel: 'Сколько купить (вес, штуки, упаковки):',
   addToListButton: 'Добавить в список покупок',
+
+  // Extended Language & Settings keys
+  addLanguageBtn: '+ Добавить язык',
+  selectLanguageHeader: 'Выбор языка',
+  aboutAppBtn: 'О приложении',
+  secBalanceTitle: 'Баланс ИИ-запросов и ключ доступа',
+  infoBtn: 'Информация',
+  topUpEnterKeyBtn: 'Пополнить / Ввести ключ',
+  secSoundSettings: 'Настройка звука',
+  secSoundSettingsSub: 'Выбор разных мелодий при готовке и при приёмах пищи, громкость и вибрация на телефоне',
+  secExportImport: 'Экспорт и импорт',
+  secExportImportSub: 'Импорт рецептов и импорт-экспорт дневного меню для переноса на другой день или обмена',
+  secFeedback: 'Обратная связь',
+  secFeedbackSub: 'Вопросы, предложения и поддержка в Telegram и по электронной почте',
+
+  // Toast notifications & popups
+  toastUpdatedPrefix: 'Обновлено:',
+  toastProfileAdded: 'Профиль «{name}» добавлен!',
+  toastProfileDeleted: 'Профиль «{name}» удалён',
+  toastAddedToShoppingList: '«{name}» добавлено в список покупок!',
+  toastProgramRestored: 'Первоначальная программа полностью восстановлена!',
+  toastKeyActivationFailed: 'Не удалось активировать ключ из ссылки',
+  toastMasterKeyActivated: 'Мастер-ключ активирован! Полный безлимит запросов.',
+  toastKeyActivatedCarryover: 'Ключ активирован! Остаток (+{carry}) прибавлен к 500 → доступно: {total}',
+  toastKeyPackageActivated: 'Пакет на 500 ИИ-запросов успешно активирован! (Доступно: {total})',
+  toastKeyActivatedRemaining: 'Ключ активирован! Доступно ИИ-запросов: {remaining} из {limit}.',
+  toastPreviousSettingsRestored: 'Предыдущие настройки восстановлены',
+  toastPortionWeightChanged: 'Вес порции изменён: {grams} г',
+  toastMealsAddedFromChat: 'Добавлено {count} блюд из чата в дневник!',
+  toastCustomMealAddedForDay: 'Разовый приём «{name}» добавлен для этого дня',
+  toastCustomMealDeleted: 'Разовый приём пищи удален',
+  toastMealDeletedFromSchedule: 'Приём пищи удален из расписания',
+  toastNutrientOrderUpdated: 'Порядок нутриентов обновлен',
+  toastNutrientShownOnMain: 'Нутриент выведен на главный экран',
+  toastNutrientHiddenFromMain: 'Нутриент скрыт с главного экрана',
+  toastNutrientMovedToPrimary: 'Нутриент переведен в Основные',
+  toastNutrientMovedToSecondary: 'Нутриент переведен во Второстепенные',
+  toastNewNutrientAdded: 'Добавлен новый нутриент: {name}',
+  toastDailyMenuCopied: 'Дневное меню ({date}) скопировано в буфер обмена!',
+  toastNutrientSettingsUpdated: 'Настройки нутриентов обновлены',
+  toastProductUpdatedInLibrary: 'Продукт «{name}» обновлён в списке продуктов!',
+  toastProductAddedToLibrary: 'Продукт «{name}» добавлен в библиотеку!',
+  toastFoodLoggedToDiary: '«{name}» ({grams} г) записано в дневник!',
+  toastRecipeChangesSaved: 'Изменения в рецепте «{name}» сохранены!',
+  toastRecipeSaved: 'Рецепт «{name}» успешно сохранен!',
+  toastRecipeCopied: 'Рецепт «{name}» скопирован в буфер обмена!',
+  toastCircularViewEnabled: 'Включен круговой вид дневной нормы',
+  toastCompactBarsEnabled: 'Включены компактные полосы нутриентов',
+  toastDailyNormUpdated: 'Дневная норма калорий и БЖУ успешно обновлена!',
+  toastGoalModeSwitched: 'Режим цели переключен: {mode}',
+  goalModeLose: 'Похудение',
+  goalModeGain: 'Набор',
+  goalModeMaintain: 'Баланс',
+  toastMealsOrderUpdated: 'Список и порядок приёмов пищи обновлен!',
+  toastResetToDefaults: 'Сброшено к заводским настройкам',
+  toastNutrientVisibilityUpdated: 'Видимость нутриента изменена',
+  toastNutrientPriorityUpdated: 'Приоритет нутриента изменён',
+  toastNutrientParamsUpdated: 'Параметры нутриента обновлены',
+  toastNutrientDeleted: 'Нутриент удалён',
+  toastMealParamsUpdated: 'Параметры приёма пищи обновлены',
+  toastMealTimeReminderUpdated: 'Время и напоминание приёма пищи обновлены',
+
+  // Person & Profile popups
+  addPersonTitle: 'Добавить человека',
+  personNamePlaceholder: 'Имя человека...',
+  deletePersonTitle: 'Удалить человека',
+
+  // FoodLibrary Add/Edit Product & Nutrient Visibility Modals
+  editProductModalTitle: 'Изменить продукт',
+  addProductModalTitle: 'Добавить продукт в библиотеку',
+  editProductModalSub: 'Ручное изменение названия и нутриентов продукта',
+  addProductAiNameSub: 'Расчет всех нутриентов через ИИ по названию',
+  addProductPhotoLabelSub: 'Распознавание КБЖУ с фото этикетки + витамины по названию',
+  addProductPhotoDishSub: 'Примерная визуальная оценка готового блюда по фото',
+  addProductManualSub: 'Ручной ввод всех значений',
+  foodNameMandatoryLabel: 'Название продукта / блюда *',
+  mandatoryBadge: '(обязательно)',
+  foodNameInputPlaceholder: 'например, Творог рассыпчатый 5%, Протеиновый батончик, Борщ...',
+  photoLabelHeading: 'Фото этикетки с КБЖУ',
+  photoDishHeading: 'Фото тарелки с едой',
+  replacePhotoBtn: 'Заменить фото',
+  chooseFileCameraBtn: 'Выбрать файл / камеру',
+  geminiAnalyzingPhoto: 'ИИ анализирует изображение...',
+  recognizeWithGeminiBtn: 'Распознать по фото',
+  aiCalculatingNutrients: 'ИИ рассчитывает нутриенты...',
+  calculateMacrosByNameBtn: 'Рассчитать КБЖУ и витамины по названию',
+  defaultPortionWeightLabel: 'Вес порции (граммы, по умолчанию 100 г)',
+  coreNutrientsTitle: 'Основные нутриенты (КБЖУ)',
+  mandatoryPluralBadge: 'обязательные',
+  additionalNutrientsTitle: 'Дополнительные нутриенты',
+  filledCountBadge: 'заполнено:',
+  availableCountBadge: 'доступно',
+  collapseBtn: 'Свернуть',
+  expandBtn: 'Развернуть',
+  vitaminsAndMineralsTitle: 'Витамины, минералы и другие нутриенты',
+  inFormCountSuffix: 'в форме',
+  addNutrientToProductTitle: 'Добавить нутриент к продукту:',
+  selectFromExistingNutrients: 'Выберите из существующих нутриентов:',
+  nutrientNotFoundQuestion: 'Нужного нутриента нет в списке?',
+  createNewNutrientBtn: '+ Создать новый нутриент',
+  creatingNewNutrientTitle: 'Создание нового нутриента',
+  backToSelectionBtn: '← Назад к выбору',
+  nutrientNameRequiredLabel: 'Название нутриента *',
+  unitLabel: 'Единица',
+  colorLabel: 'Цвет:',
+  createAndAttachBtn: 'Создать и привязать',
+  removeNutrientFromProductTitle: 'Убрать нутриент из этого продукта',
+  noAdditionalNutrientsSelected: 'Дополнительные нутриенты не выбраны. Нажмите «+ Добавить нутриент» выше.',
+  errEnterNutrientName: 'Введите название нутриента',
+  errEnterFoodNameForAi: 'Обязательно введите название продукта перед анализом ИИ!',
+  errFailedToCalculateNutrients: 'Не удалось рассчитать нутриенты',
+  errEnterFoodNameForPhoto: 'Обязательно введите название продукта перед анализом фотографии!',
+  errUploadPhotoFirst: 'Загрузите или сфотографируйте изображение!',
+  errPhotoRecognitionFailed: 'Ошибка распознавания фото',
+  errFoodNameRequiredToSave: 'Нельзя сохранить продукт без указания названия!',
+  nutrientCardsModalTitle: 'Отображение нутриентов в карточках',
+  nutrientCardsModalSub: 'Настройте, что показывать во 2-й и 3-й строках продуктов',
+  nutrientCardsRow1Title: 'Строка 1 (базовая):',
+  nutrientCardsRow1Desc: 'Калории, Белки, Жиры и Углеводы всегда зафиксированы и отображаются первыми.',
+  nutrientCardsRow2Title: 'Строки 2 и 3:',
+  nutrientCardsRow2Desc: 'Включайте или скрывайте дополнительные нутриенты. Например, витамин С можно отслеживать в дневной норме, но скрыть в карточках продуктов, чтобы они оставались компактными.',
+  alwaysInRow1Badge: 'Всегда в стр. 1',
+  showBtn: 'Показывать',
+  hideBtn: 'Скрыть',
+
+  // ResetConfirmModal & ConfigJsonModal
+  resetModalTitle: 'Восстановление первоначальной программы',
+  resetModalSubtitle: 'Сброс всех настроек к заводскому состоянию',
+  resetModalWhatRestored: 'Что будет восстановлено:',
+  resetModalItem1: 'Все исходные цели КБЖУ и калорий (2200 ккал, 140г белка и т.д.)',
+  resetModalItem2: 'Базовые приёмы пищи (Завтрак, Обед, Ужин, Перекус)',
+  resetModalItem3: 'Защищённые языки: Русский, Английский, Польский',
+  resetModalItem4: 'Оригинальная тёмная тема и изумрудный акцент',
+  resetModalItem5: 'Все стандартные переключатели разделов интерфейса',
+  resetModalClearLogsLabel: 'Очистить также дневник питания (записи съеденной еды)',
+  resetModalClearLogsHint: 'Если флажок снят, ваши съеденные блюда и история питания за сегодня останутся нетронутыми.',
+  resetModalConfirmBtn: 'Восстановить программу',
+  copiedBadge: 'Скопировано!',
+  copyBtn: 'Копировать',
+  closeBtn: 'Закрыть',
+
+  // Recipes & Cooking Timer Modal
+  errEnterDishNameForAi: 'Пожалуйста, впишите название блюда (например: «Борщ с говядиной», «Плов с курицей» или «Цезарь»).',
+  aiChefRecipeReadyBanner: '✨ ИИ-шеф расписал рецепт «{name}»: посуд — {vessels}, ингредиентов — {ingredients}. Вы можете сразу сохранить рецепт или скорректировать любой шаг.',
+  errGenerateRecipeFailed: 'Ошибка при генерации рецепта с помощью ИИ',
+  shareRecipeBtnTitle: 'Поделиться рецептом (скопировать код)',
+  timerPrepareByMinute: 'Приготовить к {min}-й минуте',
+  timerTestSoundTitle: 'Проверить звук',
+  timerStepCompleted: 'Шаг {step} завершён!',
+  timerNextBtn: 'Далее',
+  timerFinishBtn: 'Завершить',
+  timerPauseBtn: 'Пауза',
+  timerResumeBtn: 'Продолжить',
+  timerStartBtn: 'Старт',
+  timerResetStepTitle: 'Сбросить шаг',
 };
 
 export const COMPLETE_ENGLISH_LABELS: ExtendedLocalizationLabels = {
@@ -894,6 +1204,161 @@ export const COMPLETE_ENGLISH_LABELS: ExtendedLocalizationLabels = {
   productLabel: 'Selected product:',
   howMuchToBuyLabel: 'Quantity to buy (weight, pcs, packs):',
   addToListButton: 'Add to Shopping List',
+
+  // Extended Language & Settings keys
+  addLanguageBtn: '+ Add language',
+  selectLanguageHeader: 'Select Language',
+  aboutAppBtn: 'About',
+  secBalanceTitle: 'AI Requests Balance & Key',
+  infoBtn: 'Info',
+  topUpEnterKeyBtn: 'Top up / Enter Key',
+  secSoundSettings: 'Sound Settings',
+  secSoundSettingsSub: 'Choose melodies for cooking timers and meal reminders, adjust volume and phone vibration',
+  secExportImport: 'Export & Import',
+  secExportImportSub: 'Import recipes and export or import your daily menu to transfer to another day or share',
+  secFeedback: 'Feedback & Support',
+  secFeedbackSub: 'Questions, suggestions, or support via Telegram and Email',
+
+  // Toast notifications & popups
+  toastUpdatedPrefix: 'Updated:',
+  toastProfileAdded: 'Profile "{name}" added!',
+  toastProfileDeleted: 'Profile "{name}" deleted',
+  toastAddedToShoppingList: '"{name}" added to shopping list!',
+  toastProgramRestored: 'Factory defaults have been fully restored!',
+  toastKeyActivationFailed: 'Failed to activate access key from link',
+  toastMasterKeyActivated: 'Master key activated! Unlimited requests.',
+  toastKeyActivatedCarryover: 'Key activated! Remaining (+{carry}) added to 500 → available: {total}',
+  toastKeyPackageActivated: '500 AI requests package activated! (Available: {total})',
+  toastKeyActivatedRemaining: 'Key activated! Available AI requests: {remaining} of {limit}.',
+  toastPreviousSettingsRestored: 'Previous settings restored',
+  toastPortionWeightChanged: 'Portion weight updated: {grams} g',
+  toastMealsAddedFromChat: 'Added {count} dishes from chat to diary!',
+  toastCustomMealAddedForDay: 'Custom meal "{name}" added for today',
+  toastCustomMealDeleted: 'Custom meal deleted',
+  toastMealDeletedFromSchedule: 'Meal category removed from schedule',
+  toastNutrientOrderUpdated: 'Nutrient order updated',
+  toastNutrientShownOnMain: 'Nutrient shown on main screen',
+  toastNutrientHiddenFromMain: 'Nutrient hidden from main screen',
+  toastNutrientMovedToPrimary: 'Nutrient moved to Primary',
+  toastNutrientMovedToSecondary: 'Nutrient moved to Secondary',
+  toastNewNutrientAdded: 'Added new nutrient: {name}',
+  toastDailyMenuCopied: 'Daily menu ({date}) copied to clipboard!',
+  toastNutrientSettingsUpdated: 'Nutrient settings updated',
+  toastProductUpdatedInLibrary: 'Food "{name}" updated in library!',
+  toastProductAddedToLibrary: 'Food "{name}" added to library!',
+  toastFoodLoggedToDiary: '"{name}" ({grams}g) logged to diary!',
+  toastRecipeChangesSaved: 'Changes to recipe "{name}" saved!',
+  toastRecipeSaved: 'Recipe "{name}" saved!',
+  toastRecipeCopied: 'Recipe "{name}" copied to clipboard!',
+  toastCircularViewEnabled: 'Circular daily norm view enabled',
+  toastCompactBarsEnabled: 'Compact nutrient bars enabled',
+  toastDailyNormUpdated: 'Daily calorie and macro targets updated!',
+  toastGoalModeSwitched: 'Goal mode switched: {mode}',
+  goalModeLose: 'Weight Loss',
+  goalModeGain: 'Muscle Gain',
+  goalModeMaintain: 'Maintenance',
+  toastMealsOrderUpdated: 'Meal categories list and order updated!',
+  toastResetToDefaults: 'Reset to factory defaults',
+  toastNutrientVisibilityUpdated: 'Nutrient visibility updated',
+  toastNutrientPriorityUpdated: 'Nutrient priority updated',
+  toastNutrientParamsUpdated: 'Nutrient parameters updated',
+  toastNutrientDeleted: 'Nutrient deleted',
+  toastMealParamsUpdated: 'Meal category settings updated',
+  toastMealTimeReminderUpdated: 'Meal time and reminder updated',
+
+  // Person & Profile popups
+  addPersonTitle: 'Add person',
+  personNamePlaceholder: 'Person name...',
+  deletePersonTitle: 'Delete person',
+
+  // FoodLibrary Add/Edit Product & Nutrient Visibility Modals
+  editProductModalTitle: 'Edit Food Item',
+  addProductModalTitle: 'Add Food to Library',
+  editProductModalSub: 'Manually edit product name and nutrient values',
+  addProductAiNameSub: 'Calculate all nutrients via AI by product name',
+  addProductPhotoLabelSub: 'Extract macros from nutrition label photo + vitamins by name',
+  addProductPhotoDishSub: 'Visual estimation of a prepared dish from a photo',
+  addProductManualSub: 'Manual entry of all nutritional values',
+  foodNameMandatoryLabel: 'Food / Dish Name *',
+  mandatoryBadge: '(required)',
+  foodNameInputPlaceholder: 'e.g. Cottage Cheese 5%, Protein Bar, Beef Borscht...',
+  photoLabelHeading: 'Nutrition Label Photo',
+  photoDishHeading: 'Prepared Dish Photo',
+  replacePhotoBtn: 'Replace photo',
+  chooseFileCameraBtn: 'Choose file / camera',
+  geminiAnalyzingPhoto: 'AI is analyzing image...',
+  recognizeWithGeminiBtn: 'Recognize from photo',
+  aiCalculatingNutrients: 'AI is calculating nutrients...',
+  calculateMacrosByNameBtn: 'Calculate Macros & Vitamins by Name',
+  defaultPortionWeightLabel: 'Serving weight (grams, default 100 g)',
+  coreNutrientsTitle: 'Core Nutrients (Macros)',
+  mandatoryPluralBadge: 'required',
+  additionalNutrientsTitle: 'Additional Nutrients',
+  filledCountBadge: 'filled:',
+  availableCountBadge: 'available',
+  collapseBtn: 'Collapse',
+  expandBtn: 'Expand',
+  vitaminsAndMineralsTitle: 'Vitamins, Minerals & Other Nutrients',
+  inFormCountSuffix: 'in form',
+  addNutrientToProductTitle: 'Add nutrient to product:',
+  selectFromExistingNutrients: 'Select from existing nutrients:',
+  nutrientNotFoundQuestion: 'Nutrient not in the list?',
+  createNewNutrientBtn: '+ Create new nutrient',
+  creatingNewNutrientTitle: 'Create New Nutrient',
+  backToSelectionBtn: '← Back to selection',
+  nutrientNameRequiredLabel: 'Nutrient name *',
+  unitLabel: 'Unit',
+  colorLabel: 'Color:',
+  createAndAttachBtn: 'Create & attach',
+  removeNutrientFromProductTitle: 'Remove nutrient from this product',
+  noAdditionalNutrientsSelected: 'No additional nutrients selected. Tap "+ Add nutrient" above.',
+  errEnterNutrientName: 'Please enter a nutrient name',
+  errEnterFoodNameForAi: 'Please enter the food name before running AI analysis!',
+  errFailedToCalculateNutrients: 'Failed to calculate nutrients',
+  errEnterFoodNameForPhoto: 'Please enter the food name before analyzing the photo!',
+  errUploadPhotoFirst: 'Please upload or take a photo first!',
+  errPhotoRecognitionFailed: 'Photo recognition failed',
+  errFoodNameRequiredToSave: 'Cannot save a food item without a name!',
+  nutrientCardsModalTitle: 'Nutrient Display on Cards',
+  nutrientCardsModalSub: 'Customize which nutrients appear on rows 2 and 3 of food cards',
+  nutrientCardsRow1Title: 'Row 1 (Core):',
+  nutrientCardsRow1Desc: 'Calories, Protein, Fat, and Carbs are always pinned and displayed first.',
+  nutrientCardsRow2Title: 'Rows 2 & 3:',
+  nutrientCardsRow2Desc: 'Show or hide additional nutrients on food cards so they stay clean and compact.',
+  alwaysInRow1Badge: 'Always in Row 1',
+  showBtn: 'Show',
+  hideBtn: 'Hide',
+
+  // ResetConfirmModal & ConfigJsonModal
+  resetModalTitle: 'Restore Factory Defaults',
+  resetModalSubtitle: 'Reset all settings back to their original state',
+  resetModalWhatRestored: 'What will be restored:',
+  resetModalItem1: 'All default calorie and macro targets (2200 kcal, 140g protein, etc.)',
+  resetModalItem2: 'Default meal categories (Breakfast, Lunch, Dinner, Snack)',
+  resetModalItem3: 'Protected languages: Russian, English, Polish',
+  resetModalItem4: 'Original dark theme and emerald accent',
+  resetModalItem5: 'All standard interface section toggles',
+  resetModalClearLogsLabel: 'Also clear food diary logs (logged meals)',
+  resetModalClearLogsHint: 'If unchecked, your logged meals and nutrition history will remain intact.',
+  resetModalConfirmBtn: 'Restore Defaults',
+  copiedBadge: 'Copied!',
+  copyBtn: 'Copy',
+  closeBtn: 'Close',
+
+  // Recipes & Cooking Timer Modal
+  errEnterDishNameForAi: 'Please enter a dish name (e.g. "Beef Borscht", "Chicken Pilaf", or "Caesar Salad").',
+  aiChefRecipeReadyBanner: '✨ AI Chef created recipe "{name}": cookware — {vessels}, ingredients — {ingredients}. You can save it right away or adjust any step.',
+  errGenerateRecipeFailed: 'Failed to generate recipe with AI',
+  shareRecipeBtnTitle: 'Share recipe (copy code)',
+  timerPrepareByMinute: 'Prepare by minute {min}',
+  timerTestSoundTitle: 'Test sound',
+  timerStepCompleted: 'Step {step} completed!',
+  timerNextBtn: 'Next',
+  timerFinishBtn: 'Finish',
+  timerPauseBtn: 'Pause',
+  timerResumeBtn: 'Resume',
+  timerStartBtn: 'Start',
+  timerResetStepTitle: 'Reset step',
 };
 
 export const COMPLETE_POLISH_LABELS: ExtendedLocalizationLabels = {
@@ -1201,40 +1666,214 @@ export const COMPLETE_POLISH_LABELS: ExtendedLocalizationLabels = {
   productLabel: 'Wybrany produkt:',
   howMuchToBuyLabel: 'Ile kupić (waga, sztuki, opakowania):',
   addToListButton: 'Dodaj do listy zakupów',
+
+  // Extended Language & Settings keys
+  addLanguageBtn: '+ Dodaj język',
+  selectLanguageHeader: 'Wybór języka',
+  aboutAppBtn: 'O aplikacji',
+  secBalanceTitle: 'Bilans zapytań AI i klucz',
+  infoBtn: 'Informacja',
+  topUpEnterKeyBtn: 'Doładuj / Wpisz klucz',
+  secSoundSettings: 'Ustawienia dźwięku',
+  secSoundSettingsSub: 'Wybierz melodie dla minutnika gotowania i przypomnień o posiłkach, głośność i wibracje',
+  secExportImport: 'Eksport i Import',
+  secExportImportSub: 'Import przepisów oraz eksport i import dziennego menu na inny dzień lub do udostępnienia',
+  secFeedback: 'Kontakt i opinie',
+  secFeedbackSub: 'Pytania, sugestie lub wsparcie przez Telegram i Email',
+
+  // Toast notifications & popups
+  toastUpdatedPrefix: 'Zaktualizowano:',
+  toastProfileAdded: 'Profil „{name}” dodany!',
+  toastProfileDeleted: 'Profil „{name}” usunięty',
+  toastAddedToShoppingList: '„{name}” dodano do listy zakupów!',
+  toastProgramRestored: 'Ustawienia fabryczne zostały w pełni przywrócone!',
+  toastKeyActivationFailed: 'Nie udało się aktywować klucza z linku',
+  toastMasterKeyActivated: 'Klucz główny aktywowany! Pełny brak limitów.',
+  toastKeyActivatedCarryover: 'Klucz aktywowany! Pozostałe (+{carry}) dodano do 500 → dostępne: {total}',
+  toastKeyPackageActivated: 'Pakiet 500 zapytań AI został aktywowany! (Dostępne: {total})',
+  toastKeyActivatedRemaining: 'Klucz aktywowany! Dostępne zapytania AI: {remaining} z {limit}.',
+  toastPreviousSettingsRestored: 'Przywrócono poprzednie ustawienia',
+  toastPortionWeightChanged: 'Zmieniono wagę porcji: {grams} g',
+  toastMealsAddedFromChat: 'Dodano {count} dań z czatu do dziennika!',
+  toastCustomMealAddedForDay: 'Dodatkowy posiłek „{name}” dodany na ten dzień',
+  toastCustomMealDeleted: 'Dodatkowy posiłek usunięty',
+  toastMealDeletedFromSchedule: 'Posiłek usunięty z harmonogramu',
+  toastNutrientOrderUpdated: 'Kolejność składników zaktualizowana',
+  toastNutrientShownOnMain: 'Składnik wyświetlony na ekranie głównym',
+  toastNutrientHiddenFromMain: 'Składnik ukryty z ekranu głównego',
+  toastNutrientMovedToPrimary: 'Składnik przeniesiony do Głównych',
+  toastNutrientMovedToSecondary: 'Składnik przeniesiony do Dodatkowych',
+  toastNewNutrientAdded: 'Dodano nowy składnik: {name}',
+  toastDailyMenuCopied: 'Dzienne menu ({date}) skopiowano do schowka!',
+  toastNutrientSettingsUpdated: 'Ustawienia składników odżywczych zaktualizowane',
+  toastProductUpdatedInLibrary: 'Produkt „{name}” zaktualizowany w bazie!',
+  toastProductAddedToLibrary: 'Produkt „{name}” dodany do bazy!',
+  toastFoodLoggedToDiary: '„{name}” ({grams}g) zapisano w dzienniku!',
+  toastRecipeChangesSaved: 'Zmiany w przepisie „{name}” zapisane!',
+  toastRecipeSaved: 'Przepis „{name}” zapisany!',
+  toastRecipeCopied: 'Przepis „{name}” skopiowano do schowka!',
+  toastCircularViewEnabled: 'Włączono widok kołowy dziennej normy',
+  toastCompactBarsEnabled: 'Włączono kompaktowe paski składników',
+  toastDailyNormUpdated: 'Dzienna norma kalorii i makroskładników zaktualizowana!',
+  toastGoalModeSwitched: 'Tryb celu przełączony: {mode}',
+  goalModeLose: 'Redukcja',
+  goalModeGain: 'Budowa masy',
+  goalModeMaintain: 'Utrzymanie',
+  toastMealsOrderUpdated: 'Lista i kolejność posiłków zaktualizowana!',
+  toastResetToDefaults: 'Przywrócono ustawienia fabryczne',
+  toastNutrientVisibilityUpdated: 'Widoczność składnika zmieniona',
+  toastNutrientPriorityUpdated: 'Priorytet składnika zmieniony',
+  toastNutrientParamsUpdated: 'Parametry składnika zaktualizowane',
+  toastNutrientDeleted: 'Składnik usunięty',
+  toastMealParamsUpdated: 'Parametry posiłku zaktualizowane',
+  toastMealTimeReminderUpdated: 'Godzina i przypomnienie posiłku zaktualizowane',
+
+  // Person & Profile popups
+  addPersonTitle: 'Dodaj osobę',
+  personNamePlaceholder: 'Imię osoby...',
+  deletePersonTitle: 'Usuń osobę',
+
+  // FoodLibrary Add/Edit Product & Nutrient Visibility Modals
+  editProductModalTitle: 'Edytuj produkt',
+  addProductModalTitle: 'Dodaj produkt do bazy',
+  editProductModalSub: 'Ręczna zmiana nazwy i składników odżywczych produktu',
+  addProductAiNameSub: 'Obliczanie wszystkich składników przez AI wg nazwy',
+  addProductPhotoLabelSub: 'Rozpoznawanie makro ze zdjęcia etykiety + witaminy wg nazwy',
+  addProductPhotoDishSub: 'Szacunkowa ocena gotowego dania ze zdjęcia',
+  addProductManualSub: 'Ręczne wprowadzanie wszystkich wartości',
+  foodNameMandatoryLabel: 'Nazwa produktu / dania *',
+  mandatoryBadge: '(wymagane)',
+  foodNameInputPlaceholder: 'np. Twaróg 5%, Baton proteinowy, Barszcz...',
+  photoLabelHeading: 'Zdjęcie etykiety z makro',
+  photoDishHeading: 'Zdjęcie talerza z jedzeniem',
+  replacePhotoBtn: 'Zmień zdjęcie',
+  chooseFileCameraBtn: 'Wybierz plik / aparat',
+  geminiAnalyzingPhoto: 'AI analizuje zdjęcie...',
+  recognizeWithGeminiBtn: 'Rozpoznaj ze zdjęcia',
+  aiCalculatingNutrients: 'AI oblicza składniki...',
+  calculateMacrosByNameBtn: 'Oblicz makro i witaminy wg nazwy',
+  defaultPortionWeightLabel: 'Waga porcji (gramy, domyślnie 100 g)',
+  coreNutrientsTitle: 'Główne składniki (Makro)',
+  mandatoryPluralBadge: 'wymagane',
+  additionalNutrientsTitle: 'Dodatkowe składniki',
+  filledCountBadge: 'wypełniono:',
+  availableCountBadge: 'dostępnych',
+  collapseBtn: 'Zwiń',
+  expandBtn: 'Rozwiń',
+  vitaminsAndMineralsTitle: 'Witaminy, minerały i inne składniki',
+  inFormCountSuffix: 'w formularzu',
+  addNutrientToProductTitle: 'Dodaj składnik do produktu:',
+  selectFromExistingNutrients: 'Wybierz z istniejących składników:',
+  nutrientNotFoundQuestion: 'Brak szukanego składnika na liście?',
+  createNewNutrientBtn: '+ Utwórz nowy składnik',
+  creatingNewNutrientTitle: 'Tworzenie nowego składnika',
+  backToSelectionBtn: '← Powrót do wyboru',
+  nutrientNameRequiredLabel: 'Nazwa składnika *',
+  unitLabel: 'Jednostka',
+  colorLabel: 'Kolor:',
+  createAndAttachBtn: 'Utwórz i przypisz',
+  removeNutrientFromProductTitle: 'Usuń składnik z tego produktu',
+  noAdditionalNutrientsSelected: 'Nie wybrano dodatkowych składników. Kliknij „+ Dodaj składnik” powyżej.',
+  errEnterNutrientName: 'Wpisz nazwę składnika',
+  errEnterFoodNameForAi: 'Wpisz nazwę produktu przed analizą AI!',
+  errFailedToCalculateNutrients: 'Nie udało się obliczyć składników',
+  errEnterFoodNameForPhoto: 'Wpisz nazwę produktu przed analizą zdjęcia!',
+  errUploadPhotoFirst: 'Prześlij lub zrób zdjęcie!',
+  errPhotoRecognitionFailed: 'Błąd rozpoznawania zdjęcia',
+  errFoodNameRequiredToSave: 'Nie można zapisać produktu bez podania nazwy!',
+  nutrientCardsModalTitle: 'Wyświetlanie składników na kartach',
+  nutrientCardsModalSub: 'Ustaw, co pokazywać w 2. i 3. wierszu kart produktów',
+  nutrientCardsRow1Title: 'Wiersz 1 (bazowy):',
+  nutrientCardsRow1Desc: 'Kalorie, Białka, Tłuszcze i Węglowodany są zawsze przypięte i wyświetlane jako pierwsze.',
+  nutrientCardsRow2Title: 'Wiersze 2 i 3:',
+  nutrientCardsRow2Desc: 'Włączaj lub ukrywaj dodatkowe składniki na kartach produktów, aby pozostały czytelne i kompaktowe.',
+  alwaysInRow1Badge: 'Zawsze w w. 1',
+  showBtn: 'Pokazuj',
+  hideBtn: 'Ukryj',
+
+  // ResetConfirmModal & ConfigJsonModal
+  resetModalTitle: 'Przywracanie ustawień fabrycznych',
+  resetModalSubtitle: 'Reset wszystkich ustawień do stanu początkowego',
+  resetModalWhatRestored: 'Co zostanie przywrócone:',
+  resetModalItem1: 'Wszystkie domyślne cele kalorii i makroskładników (2200 kcal, 140g białka itd.)',
+  resetModalItem2: 'Podstawowe posiłki (Śniadanie, Obiad, Kolacja, Przekąska)',
+  resetModalItem3: 'Chronione języki: Rosyjski, Angielski, Polski',
+  resetModalItem4: 'Oryginalny ciemny motyw i szmaragdowy akcent',
+  resetModalItem5: 'Wszystkie standardowe przełączniki sekcji interfejsu',
+  resetModalClearLogsLabel: 'Wyczyść także dziennik żywienia (zapisane posiłki)',
+  resetModalClearLogsHint: 'Jeśli odznaczone, Twoje zapisane posiłki i historia żywienia pozostaną nienaruszone.',
+  resetModalConfirmBtn: 'Przywróć ustawienia',
+  copiedBadge: 'Skopiowano!',
+  copyBtn: 'Kopiuj',
+  closeBtn: 'Zamknij',
+
+  // Recipes & Cooking Timer Modal
+  errEnterDishNameForAi: 'Wpisz nazwę dania (np. „Barszcz z wołowiną”, „Pilaw z kurczakiem” lub „Sałatka Cezar”).',
+  aiChefRecipeReadyBanner: '✨ Szef AI rozpisał przepis „{name}”: naczyń — {vessels}, składników — {ingredients}. Możesz od razu zapisać przepis lub edytować dowolny krok.',
+  errGenerateRecipeFailed: 'Błąd podczas generowania przepisu przez AI',
+  shareRecipeBtnTitle: 'Udostępnij przepis (skopiuj kod)',
+  timerPrepareByMinute: 'Przygotować do {min}. minuty',
+  timerTestSoundTitle: 'Sprawdź dźwięk',
+  timerStepCompleted: 'Krok {step} zakończony!',
+  timerNextBtn: 'Dalej',
+  timerFinishBtn: 'Zakończ',
+  timerPauseBtn: 'Pauza',
+  timerResumeBtn: 'Wznów',
+  timerStartBtn: 'Start',
+  timerResetStepTitle: 'Resetuj krok',
 };
 
-export function getWaterProductName(langCode: string = 'ru'): string {
+export function getWaterProductName(langCode: string = 'ru', customWaterName?: string): string {
+  if (customWaterName && customWaterName.trim()) {
+    return customWaterName.trim();
+  }
   const code = (langCode || 'ru').slice(0, 2).toLowerCase();
-  if (code === 'en') return 'Water';
+  if (code === 'ru') return 'Вода';
   if (code === 'pl') return 'Woda';
-  return 'Вода';
+  return 'Water';
 }
 
-export function translateUnit(unit: string = '', langCode: string = 'ru'): string {
+export function translateUnit(
+  unit: string = '',
+  langCode: string = 'ru',
+  customUnits?: Record<string, string>
+): string {
   const code = (langCode || 'ru').slice(0, 2).toLowerCase();
   const u = (unit || '').trim().toLowerCase();
 
-  if (code === 'en') {
-    if (u === 'ккал' || u === 'kcal') return 'kcal';
-    if (u === 'г' || u === 'g') return 'g';
-    if (u === 'мг' || u === 'mg') return 'mg';
-    if (u === 'мкг' || u === 'mcg' || u === 'µg') return 'mcg';
-    if (u === 'мл' || u === 'ml') return 'ml';
-    if (u === 'ед' || u === 'units' || u === 'j.') return 'units';
+  let canonicalKey = '';
+  if (u === 'ккал' || u === 'kcal' || u === 'cal') canonicalKey = 'kcal';
+  else if (u === 'г' || u === 'g' || u === 'гр') canonicalKey = 'g';
+  else if (u === 'мг' || u === 'mg') canonicalKey = 'mg';
+  else if (u === 'мкг' || u === 'mcg' || u === 'µg' || u === 'ug') canonicalKey = 'mcg';
+  else if (u === 'мл' || u === 'ml') canonicalKey = 'ml';
+  else if (u === 'ед' || u === 'units' || u === 'j.') canonicalKey = 'units';
+
+  if (canonicalKey && customUnits && customUnits[canonicalKey]) {
+    return customUnits[canonicalKey];
+  }
+
+  if (code === 'ru') {
+    if (canonicalKey === 'kcal') return 'ккал';
+    if (canonicalKey === 'g') return 'г';
+    if (canonicalKey === 'mg') return 'мг';
+    if (canonicalKey === 'mcg') return 'мкг';
+    if (canonicalKey === 'ml') return 'мл';
+    if (canonicalKey === 'units') return 'ед';
   } else if (code === 'pl') {
-    if (u === 'ккал' || u === 'kcal') return 'kcal';
-    if (u === 'г' || u === 'g') return 'g';
-    if (u === 'мг' || u === 'mg') return 'mg';
-    if (u === 'мкг' || u === 'mcg' || u === 'µg') return 'µg';
-    if (u === 'мл' || u === 'ml') return 'ml';
-    if (u === 'ед' || u === 'units' || u === 'j.') return 'j.';
+    if (canonicalKey === 'kcal') return 'kcal';
+    if (canonicalKey === 'g') return 'g';
+    if (canonicalKey === 'mg') return 'mg';
+    if (canonicalKey === 'mcg') return 'µg';
+    if (canonicalKey === 'ml') return 'ml';
+    if (canonicalKey === 'units') return 'j.';
   } else {
-    if (u === 'ккал' || u === 'kcal') return 'ккал';
-    if (u === 'г' || u === 'g') return 'г';
-    if (u === 'мг' || u === 'mg') return 'мг';
-    if (u === 'мкг' || u === 'mcg' || u === 'µg') return 'мкг';
-    if (u === 'мл' || u === 'ml') return 'мл';
-    if (u === 'ед' || u === 'units' || u === 'j.') return 'ед';
+    if (canonicalKey === 'kcal') return 'kcal';
+    if (canonicalKey === 'g') return 'g';
+    if (canonicalKey === 'mg') return 'mg';
+    if (canonicalKey === 'mcg') return 'mcg';
+    if (canonicalKey === 'ml') return 'ml';
+    if (canonicalKey === 'units') return 'units';
   }
   return unit;
 }
@@ -1246,12 +1885,12 @@ export function getUITranslations(
   const code = (langCode || 'ru').slice(0, 2).toLowerCase();
   let base: ExtendedLocalizationLabels;
 
-  if (code === 'en') {
-    base = COMPLETE_ENGLISH_LABELS;
+  if (code === 'ru') {
+    base = COMPLETE_RUSSIAN_LABELS;
   } else if (code === 'pl') {
     base = COMPLETE_POLISH_LABELS;
   } else {
-    base = COMPLETE_RUSSIAN_LABELS;
+    base = COMPLETE_ENGLISH_LABELS;
   }
 
   if (!customLabels) {
@@ -1268,5 +1907,6 @@ export function getDateLocale(langCode: string = 'ru'): string {
   const code = (langCode || 'ru').slice(0, 2).toLowerCase();
   if (code === 'pl') return 'pl-PL';
   if (code === 'en') return 'en-US';
-  return 'ru-RU';
+  if (code === 'ru') return 'ru-RU';
+  return code;
 }

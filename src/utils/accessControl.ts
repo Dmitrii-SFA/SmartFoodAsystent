@@ -1,4 +1,11 @@
-import { MetricConfig, UserConfig } from '../types/config';
+import { MetricConfig, UserConfig, LanguageOption, CustomLanguagePack } from '../types/config';
+import { COMPLETE_ENGLISH_LABELS } from './translations';
+import {
+  METRIC_TRANSLATIONS,
+  METRIC_SHORT_TRANSLATIONS,
+  MEAL_CATEGORY_TRANSLATIONS,
+  INITIAL_DAY_LOG_ITEM_NAMES,
+} from '../config/defaultConfig';
 
 export const CLOUDFLARE_WORKER_URL = 'https://api.smartfoodasystent.workers.dev/api';
 
@@ -909,6 +916,7 @@ export async function callCloudflareWorkerAI(payload: {
   imageBase64?: string;
   mimeType?: string;
   action?: string;
+  maxOutputTokens?: number;
   extraPayload?: Record<string, any>;
   onOpenPaywall?: () => void;
   onQuotaUsed?: (newUsedCount: number) => void;
@@ -966,10 +974,11 @@ export async function callCloudflareWorkerAI(payload: {
     generationConfig: {
       responseMimeType: 'application/json',
       temperature: 0.2,
+      ...(payload.maxOutputTokens ? { maxOutputTokens: payload.maxOutputTokens } : {}),
     },
     accessKey: savedAccessKey || '',
     deviceId,
-     ...(pendingCarryoverBonus > 0 ? { carryoverRequests: pendingCarryoverBonus } : {}),
+    ...(pendingCarryoverBonus > 0 ? { carryoverRequests: pendingCarryoverBonus } : {}),
     action: payload.action || 'ai_request',
     ...(payload.extraPayload || {}),
   };
@@ -1572,4 +1581,225 @@ Return strictly a valid JSON object with top-level core macros AND a "targets" o
     onOpenPaywall: params.onOpenPaywall,
     onQuotaUsed: params.onQuotaUsed,
   });
+}
+
+/**
+ * 6. Translate full application from English into a new target language via AI
+ */
+export async function translateLanguageFromEnglishWithWorker(params: {
+  targetLanguageName: string;
+  activeMetricIds?: string[];
+  onOpenPaywall?: () => void;
+  onQuotaUsed?: (newUsedCount: number) => void;
+}): Promise<LanguageOption> {
+  const cleanTarget = (params.targetLanguageName || '').trim();
+  if (!cleanTarget) {
+    throw new Error('Please enter a language name.');
+  }
+
+  // English reference nutrients (core macros, vitamins, minerals + any active user metrics)
+  const coreAndCommonMetricIds = [
+    'calories',
+    'proteins',
+    'fats',
+    'carbs',
+    'fiber',
+    'water',
+    'sugar',
+    'addedSugar',
+    'starch',
+    'saturatedFat',
+    'monounsaturatedFat',
+    'polyunsaturatedFat',
+    'transFat',
+    'cholesterol',
+    'omega3',
+    'omega6',
+    'omega9',
+    'vitaminA',
+    'vitaminC',
+    'vitaminD',
+    'vitaminE',
+    'vitaminK',
+    'vitaminB1',
+    'vitaminB2',
+    'vitaminB3',
+    'choline',
+    'vitaminB5',
+    'vitaminB6',
+    'vitaminB7',
+    'vitaminB9',
+    'vitaminB12',
+    'calcium',
+    'iron',
+    'magnesium',
+    'phosphorus',
+    'potassium',
+    'sodium',
+    'zinc',
+    'selenium',
+    'iodine',
+    'copper',
+    'manganese',
+    'chromium',
+    'caffeine',
+    'creatine',
+    'collagen',
+  ];
+
+  const allNeededMetricIds = Array.from(
+    new Set([...coreAndCommonMetricIds, ...(params.activeMetricIds || [])])
+  );
+
+  const englishMetricsToTranslate: Record<string, string> = {};
+  allNeededMetricIds.forEach((id) => {
+    if (METRIC_TRANSLATIONS.en[id]) {
+      englishMetricsToTranslate[id] = METRIC_TRANSLATIONS.en[id];
+    }
+  });
+
+  const englishPresetProducts: Record<string, string> = {
+    'lib-water': 'Water',
+    'lib-6': 'Oat Flakes',
+    'lib-5': 'Chicken Egg',
+    'lib-3': 'Cottage Cheese 5%',
+    'lib-7': 'Beef Brisket',
+    'lib-8': 'Raw Potato',
+    'lib-9': 'White Cabbage',
+    'lib-10': 'Fresh Beetroot',
+    'lib-11': 'Fresh Carrot',
+    'lib-12': 'Yellow Onion',
+    'lib-13': 'Sunflower Oil',
+  };
+
+  const englishRecipes = {
+    oatRecipeName: 'Oatmeal Pancake with Cottage Cheese',
+    borschtRecipeName: 'Classic Beef Borscht',
+    potVesselName: 'Pot 4L (Broth & Base)',
+    pan1VesselName: 'Frying Pan #1 (Onion & Carrot)',
+    pan2VesselName: 'Frying Pan #2 (Beetroot)',
+    transferPan1Name: 'Contents: Frying Pan #1 (Onion & Carrot)',
+    transferPan2Name: 'Contents: Frying Pan #2 (Beetroot)',
+    regimeSimmer5Name: 'Simmer under lid (level 5/9)',
+    regimeSimmer3Name: 'Gentle simmer under lid (level 3/9)',
+    aiNote:
+      'Rich beef broth simmered gently (level 3/9). Onion and carrot are sautéed in Frying Pan #1, while beetroot is cooked separately in Frying Pan #2: 2 min sear on high heat (9/9), then 7 min covered at level 5/9, and 7 more min covered at level 3/9.',
+    aiImpact:
+      'Separate two-stage covered simmering of beetroot preserves betanin and deep ruby color, while beta-carotene from carrots dissolves into the lipid fraction for optimal absorption.',
+    aiTips:
+      'Let the borscht rest covered for 20 minutes after turning off the stove to balance the flavors.',
+  };
+
+  const sourcePayload = {
+    labels: COMPLETE_ENGLISH_LABELS,
+    units: {
+      kcal: 'kcal',
+      g: 'g',
+      mg: 'mg',
+      mcg: 'mcg',
+      ml: 'ml',
+      units: 'units',
+    },
+    mealCategories: MEAL_CATEGORY_TRANSLATIONS.en,
+    metrics: englishMetricsToTranslate,
+    metricShorts: METRIC_SHORT_TRANSLATIONS.en,
+    presetProducts: englishPresetProducts,
+    initialDayItems: INITIAL_DAY_LOG_ITEM_NAMES.en,
+    defaultPersonName: 'Me',
+    recipes: englishRecipes,
+  };
+
+  const prompt = `
+You are a professional localization engine for the nutrition & calorie tracker app "Smart Food Assistance".
+Translate ALL strings in the provided English source JSON into the target language requested by the user: "${cleanTarget}".
+
+CRITICAL RULES:
+1. Translate EVERY value in "labels", "units", "mealCategories", "metrics", "metricShorts", "presetProducts", "initialDayItems", "defaultPersonName", and "recipes" from English into natural, idiomatic "${cleanTarget}".
+2. Keep ALL JSON keys 100% identical to the English source JSON.
+3. Keep brand name "Smart Food Assistance" intact where appropriate (e.g. in appTitle).
+4. Determine the correct 2-letter ISO 639-1 language code for "${cleanTarget}" (e.g. "de", "es", "fr", "uk", "it", "pt", "cs", "tr", etc.), its English name ("name"), its native self-name ("nativeName"), and country/language emoji flag ("flag").
+
+English Source JSON:
+${JSON.stringify(sourcePayload)}
+
+Return strictly a valid JSON object matching this exact structure:
+{
+  "code": "2-letter lowercase ISO code",
+  "name": "Language name in English",
+  "nativeName": "Language name in its native script (capitalized)",
+  "flag": "🇺🇳",
+  "labels": { ...all translated keys from labels... },
+  "customPack": {
+    "units": { "kcal": "...", "g": "...", "mg": "...", "mcg": "...", "ml": "...", "units": "..." },
+    "mealCategories": { ...translated mealCategories... },
+    "metrics": { ...translated metrics... },
+    "metricShorts": { ...translated metricShorts... },
+    "presetProducts": { ...translated presetProducts... },
+    "initialDayItems": { ...translated initialDayItems... },
+    "defaultPersonName": "...",
+    "recipes": { ...translated recipes... }
+  }
+}
+`;
+
+  const result = await callCloudflareWorkerAI({
+    prompt,
+    action: 'translate_language',
+    maxOutputTokens: 8192,
+    onOpenPaywall: params.onOpenPaywall,
+    onQuotaUsed: params.onQuotaUsed,
+  });
+
+  const rawCode = String(result?.code || cleanTarget.slice(0, 2))
+    .trim()
+    .toLowerCase()
+    .slice(0, 2);
+  const code = rawCode.length === 2 ? rawCode : 'xx';
+  const nativeName = String(result?.nativeName || cleanTarget).trim();
+  const name = String(result?.name || cleanTarget).trim();
+  const flag = String(result?.flag || '🌐').trim();
+
+  const mergedLabels = {
+    ...COMPLETE_ENGLISH_LABELS,
+    ...(result?.labels && typeof result.labels === 'object' ? result.labels : {}),
+  };
+
+  const rawPack = result?.customPack || result || {};
+  const customPack: CustomLanguagePack = {
+    units: rawPack.units && typeof rawPack.units === 'object' ? rawPack.units : undefined,
+    mealCategories:
+      rawPack.mealCategories && typeof rawPack.mealCategories === 'object'
+        ? rawPack.mealCategories
+        : undefined,
+    metrics:
+      rawPack.metrics && typeof rawPack.metrics === 'object' ? rawPack.metrics : undefined,
+    metricShorts:
+      rawPack.metricShorts && typeof rawPack.metricShorts === 'object'
+        ? rawPack.metricShorts
+        : undefined,
+    presetProducts:
+      rawPack.presetProducts && typeof rawPack.presetProducts === 'object'
+        ? rawPack.presetProducts
+        : undefined,
+    initialDayItems:
+      rawPack.initialDayItems && typeof rawPack.initialDayItems === 'object'
+        ? rawPack.initialDayItems
+        : undefined,
+    defaultPersonName:
+      typeof rawPack.defaultPersonName === 'string' && rawPack.defaultPersonName.trim()
+        ? rawPack.defaultPersonName.trim()
+        : undefined,
+    recipes:
+      rawPack.recipes && typeof rawPack.recipes === 'object' ? rawPack.recipes : undefined,
+  };
+
+  return {
+    code,
+    name,
+    nativeName,
+    flag,
+    isProtected: false,
+    labels: mergedLabels,
+    customPack,
+  };
 }

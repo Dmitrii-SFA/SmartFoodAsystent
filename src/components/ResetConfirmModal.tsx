@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { ThemeStyles } from '../utils/themeHelper';
-import { RotateCcw, AlertTriangle, X, Check, ShieldAlert } from 'lucide-react';
+import { RotateCcw, AlertTriangle, X } from 'lucide-react';
+import { LocalizationLabels } from '../types/config';
+import { getUITranslations } from '../utils/translations';
 
 interface ResetConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirmReset: (clearLogsToo: boolean) => void;
   themeStyles: ThemeStyles;
+  langCode?: string;
+  labels?: Partial<LocalizationLabels>;
 }
 
 export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
@@ -14,10 +18,14 @@ export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
   onClose,
   onConfirmReset,
   themeStyles,
+  langCode = 'ru',
+  labels,
 }) => {
   const [clearLogs, setClearLogs] = useState(false);
 
   if (!isOpen) return null;
+
+  const t = getUITranslations(langCode, labels);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -32,10 +40,10 @@ export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
-                <span>Восстановление первоначальной программы</span>
+                <span>{t.resetModalTitle}</span>
               </h2>
               <p className="text-[11px] text-slate-400">
-                Сброс всех настроек к заводскому состоянию
+                {t.resetModalSubtitle}
               </p>
             </div>
           </div>
@@ -52,14 +60,14 @@ export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
           <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-950/30 text-amber-200 space-y-2">
             <div className="flex items-center gap-2 font-bold text-amber-300">
               <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>Что будет восстановлено:</span>
+              <span>{t.resetModalWhatRestored}</span>
             </div>
             <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-300">
-              <li>Все <b>исходные цели КБЖУ и калорий</b> (2200 ккал, 140г белка и т.д.)</li>
-              <li>Базовые <b>приёмы пищи</b> (Завтрак, Обед, Ужин, Перекус)</li>
-              <li><b>Защищённые языки</b>: Русский (активен), Английский, Польский</li>
-              <li>Оригинальная <b>тёмная тема</b> и изумрудный акцент</li>
-              <li>Все стандартные переключатели разделов интерфейса</li>
+              <li>{t.resetModalItem1}</li>
+              <li>{t.resetModalItem2}</li>
+              <li>{t.resetModalItem3}</li>
+              <li>{t.resetModalItem4}</li>
+              <li>{t.resetModalItem5}</li>
             </ul>
           </div>
 
@@ -73,10 +81,10 @@ export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
             />
             <div className="space-y-0.5">
               <span className="font-semibold text-slate-200">
-                Очистить также дневник питания (записи съеденной еды)
+                {t.resetModalClearLogsLabel}
               </span>
               <p className="text-[10px] text-slate-400">
-                Если флажок снят, ваши съеденные блюда и история питания за сегодня останутся нетронутыми.
+                {t.resetModalClearLogsHint}
               </p>
             </div>
           </label>
@@ -88,17 +96,18 @@ export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
             onClick={onClose}
             className="px-3.5 py-2 text-xs rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 transition"
           >
-            Отмена
+            {t.cancel}
           </button>
           <button
             onClick={() => onConfirmReset(clearLogs)}
             className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-red-600 hover:bg-red-500 text-white shadow-lg transition active:scale-95"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>Восстановить программу</span>
+            <span>{t.resetModalConfirmBtn}</span>
           </button>
         </div>
       </div>
     </div>
   );
 };
+

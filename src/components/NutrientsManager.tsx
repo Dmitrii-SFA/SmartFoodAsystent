@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { getNutrientColor } from '../utils/nutrientColors';
+import { getUITranslations } from '../utils/translations';
 
 interface NutrientsManagerProps {
   metrics: MetricConfig[];
@@ -36,10 +37,12 @@ export const NutrientsManager: React.FC<NutrientsManagerProps> = ({
   accentColor,
   borderRadius,
   langCode = 'ru',
+  labels,
   isCollapsed = false,
   onToggleCollapse,
   onUpdateMetrics,
 }) => {
+  const t = getUITranslations(langCode, labels);
   const [showSecondary, setShowSecondary] = useState<boolean>(false);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [newLabel, setNewLabel] = useState('');
@@ -104,10 +107,7 @@ export const NutrientsManager: React.FC<NutrientsManagerProps> = ({
         showInProducts: nextVis,
       };
     });
-    onUpdateMetrics(
-      updated,
-      isEn ? 'Nutrient visibility updated' : isPl ? 'Widoczność składnika zmieniona' : 'Видимость нутриента изменена'
-    );
+    onUpdateMetrics(updated, t.toastNutrientVisibilityUpdated);
   };
 
   const handleTogglePrimary = (id: string) => {
@@ -116,10 +116,7 @@ export const NutrientsManager: React.FC<NutrientsManagerProps> = ({
       const curPrimary = isMetricPrimary(m);
       return { ...m, isPrimary: !curPrimary, showInSummary: true };
     });
-    onUpdateMetrics(
-      updated,
-      isEn ? 'Nutrient priority updated' : isPl ? 'Priorytet składnika zmieniony' : 'Приоритет нутриента изменён'
-    );
+    onUpdateMetrics(updated, t.toastNutrientPriorityUpdated);
   };
 
   const handleChangeField = (
@@ -128,10 +125,7 @@ export const NutrientsManager: React.FC<NutrientsManagerProps> = ({
     val: string | number
   ) => {
     const updated = metrics.map((m) => (m.id === id ? { ...m, [field]: val } : m));
-    onUpdateMetrics(
-      updated,
-      isEn ? 'Nutrient parameters updated' : isPl ? 'Parametry składnika zaktualizowane' : 'Параметры нутриента обновлены'
-    );
+    onUpdateMetrics(updated, t.toastNutrientParamsUpdated);
   };
 
   const handleDeleteCustom = (id: string) => {
@@ -140,10 +134,7 @@ export const NutrientsManager: React.FC<NutrientsManagerProps> = ({
       return;
     }
     const updated = metrics.filter((m) => m.id !== id);
-    onUpdateMetrics(
-      updated,
-      isEn ? 'Nutrient deleted' : isPl ? 'Składnik usunięty' : 'Нутриент удалён'
-    );
+    onUpdateMetrics(updated, t.toastNutrientDeleted);
   };
 
   const handleAddCustom = (e: React.FormEvent) => {

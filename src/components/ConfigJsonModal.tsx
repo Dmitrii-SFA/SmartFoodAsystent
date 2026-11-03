@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { UserConfig } from '../types/config';
 import { PRESET_CONFIGS, DEFAULT_USER_CONFIG, DEFAULT_INSTALLED_LANGUAGES, ensureEntireConfigProtected } from '../config/defaultConfig';
 import { ThemeStyles, getBorderRadiusClass } from '../utils/themeHelper';
+import { getUITranslations } from '../utils/translations';
 import {
   Code,
   Copy,
@@ -47,6 +48,8 @@ export const ConfigJsonModal: React.FC<ConfigJsonModalProps> = ({
   }, [isOpen, config]);
 
   if (!isOpen) return null;
+
+  const t = getUITranslations(config.language?.code, config.language?.labels);
 
   const handleApplyJson = () => {
     try {
@@ -201,24 +204,24 @@ export const ConfigJsonModal: React.FC<ConfigJsonModalProps> = ({
             <button
               onClick={handleCopy}
               className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 transition"
-              title="Скопировать JSON в буфер"
+              title={t.copyBtn}
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Скопировано!' : 'Копировать'}</span>
+              <span>{copied ? t.copiedBadge : t.copyBtn}</span>
             </button>
 
             <button
               onClick={handleDownload}
               className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 transition"
-              title="Скачать файл userConfig.json"
+              title={t.exportConfig}
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Экспорт</span>
+              <span>{t.exportConfig}</span>
             </button>
 
             <label className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer">
               <Upload className="w-3.5 h-3.5" />
-              <span>Импорт</span>
+              <span>{t.importConfig}</span>
               <input
                 type="file"
                 accept=".json"
@@ -230,10 +233,10 @@ export const ConfigJsonModal: React.FC<ConfigJsonModalProps> = ({
             <button
               onClick={onResetToDefault}
               className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-xl border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-white transition"
-              title="Сбросить к первоначальному конфигу"
+              title={t.resetToDefault}
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Сброс</span>
+              <span>{t.reset}</span>
             </button>
           </div>
 
@@ -242,7 +245,7 @@ export const ConfigJsonModal: React.FC<ConfigJsonModalProps> = ({
               onClick={onClose}
               className="px-4 py-1.5 text-xs font-medium rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-300 transition"
             >
-              Закрыть
+              {t.closeBtn}
             </button>
             <button
               onClick={handleApplyJson}
@@ -251,7 +254,7 @@ export const ConfigJsonModal: React.FC<ConfigJsonModalProps> = ({
               style={{ backgroundColor: config.theme.accentColor }}
             >
               <Check className="w-3.5 h-3.5" />
-              <span>Применить изменения</span>
+              <span>{t.applyChanges}</span>
             </button>
           </div>
         </div>

@@ -162,6 +162,31 @@ export interface LocalizationLabels {
   secThemeSub?: string;
   secDataReset?: string;
   secDataResetSub?: string;
+  addLanguageBtn?: string;
+}
+
+export interface CustomLanguagePack {
+  metrics?: Record<string, string>;
+  metricShorts?: Record<string, string>;
+  units?: Record<string, string>;
+  mealCategories?: Record<string, string>;
+  presetProducts?: Record<string, string>;
+  initialDayItems?: Record<string, string>;
+  defaultPersonName?: string;
+  recipes?: {
+    oatRecipeName?: string;
+    borschtRecipeName?: string;
+    potVesselName?: string;
+    pan1VesselName?: string;
+    pan2VesselName?: string;
+    transferPan1Name?: string;
+    transferPan2Name?: string;
+    regimeSimmer5Name?: string;
+    regimeSimmer3Name?: string;
+    aiNote?: string;
+    aiImpact?: string;
+    aiTips?: string;
+  };
 }
 
 export interface LanguageOption {
@@ -171,6 +196,7 @@ export interface LanguageOption {
   flag?: string;
   isProtected?: boolean;
   labels: LocalizationLabels;
+  customPack?: CustomLanguagePack;
 }
 
 export interface LocalizationConfig {

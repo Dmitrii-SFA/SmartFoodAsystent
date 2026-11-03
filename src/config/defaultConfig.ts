@@ -1,4 +1,4 @@
-import { UserConfig, DayLog, LanguageOption, MetricConfig, MealCategoryConfig, ThemeMode } from '../types/config';
+import { UserConfig, DayLog, LanguageOption, MetricConfig, MealCategoryConfig, ThemeMode, CustomLanguagePack } from '../types/config';
 import {
   COMPLETE_RUSSIAN_LABELS,
   COMPLETE_ENGLISH_LABELS,
@@ -549,15 +549,30 @@ export const MEAL_CATEGORY_TRANSLATIONS: Record<string, Record<string, string>> 
 
 export function translateConfigItems(
   config: UserConfig,
-  targetLangCode: string
+  targetLangCode: string,
+  explicitPack?: CustomLanguagePack
 ): { metrics: UserConfig['metrics']; mealCategories: UserConfig['mealCategories'] } {
   const code = targetLangCode.slice(0, 2).toLowerCase();
-  const metricMap = METRIC_TRANSLATIONS[code];
-  const shortMap = METRIC_SHORT_TRANSLATIONS[code];
-  const mealMap = MEAL_CATEGORY_TRANSLATIONS[code];
+  const matchedLang = (config.installedLanguages || []).find(
+    (l) => l.code.slice(0, 2).toLowerCase() === code
+  );
+  const customPack = explicitPack || matchedLang?.customPack;
+
+  const metricMap = {
+    ...(METRIC_TRANSLATIONS[code] || METRIC_TRANSLATIONS.en),
+    ...(customPack?.metrics || {}),
+  };
+  const shortMap = {
+    ...(METRIC_SHORT_TRANSLATIONS[code] || METRIC_SHORT_TRANSLATIONS.en),
+    ...(customPack?.metricShorts || {}),
+  };
+  const mealMap = {
+    ...(MEAL_CATEGORY_TRANSLATIONS[code] || MEAL_CATEGORY_TRANSLATIONS.en),
+    ...(customPack?.mealCategories || {}),
+  };
 
   const newMetrics = (config.metrics || []).map((m) => {
-    const translatedUnit = translateUnit(m.unit, code);
+    const translatedUnit = translateUnit(m.unit, code, customPack?.units);
     const translatedLabel = metricMap && metricMap[m.id] ? metricMap[m.id] : m.label;
     const translatedShort =
       shortMap && shortMap[m.id]
@@ -3387,10 +3402,14 @@ export const INITIAL_DAY_LOG_ITEM_NAMES: Record<string, Record<string, string>> 
 
 export function translateInitialDayLogs(
   logs: Record<string, DayLog>,
-  langCode: string = 'en'
+  langCode: string = 'en',
+  customInitialDayItems?: Record<string, string>
 ): Record<string, DayLog> {
   const c = (langCode || 'en').slice(0, 2).toLowerCase();
-  const map = INITIAL_DAY_LOG_ITEM_NAMES[c] || INITIAL_DAY_LOG_ITEM_NAMES.en;
+  const map = {
+    ...(INITIAL_DAY_LOG_ITEM_NAMES[c] || INITIAL_DAY_LOG_ITEM_NAMES.en),
+    ...(customInitialDayItems || {}),
+  };
   const next: Record<string, DayLog> = {};
   Object.entries(logs || {}).forEach(([dateKey, dayLog]) => {
     if (!dayLog || !Array.isArray(dayLog.items)) {
@@ -3407,9 +3426,16 @@ export function translateInitialDayLogs(
   return next;
 }
 
-export function getInitialDayLog(todayStr: string, langCode: string = 'en'): DayLog {
+export function getInitialDayLog(
+  todayStr: string,
+  langCode: string = 'en',
+  customInitialDayItems?: Record<string, string>
+): DayLog {
   const c = (langCode || 'en').slice(0, 2).toLowerCase();
-  const names = INITIAL_DAY_LOG_ITEM_NAMES[c] || INITIAL_DAY_LOG_ITEM_NAMES.en;
+  const names = {
+    ...(INITIAL_DAY_LOG_ITEM_NAMES[c] || INITIAL_DAY_LOG_ITEM_NAMES.en),
+    ...(customInitialDayItems || {}),
+  };
   return {
     date: todayStr,
     waterMl: 1250,

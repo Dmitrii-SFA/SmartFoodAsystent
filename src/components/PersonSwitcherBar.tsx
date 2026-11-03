@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { User, X } from 'lucide-react';
-import { PersonProfile } from '../types/config';
+import { PersonProfile, LocalizationLabels } from '../types/config';
 import { ThemeStyles, getBorderRadiusClass } from '../utils/themeHelper';
+import { getUITranslations } from '../utils/translations';
 
 interface PersonSwitcherBarProps {
   people: PersonProfile[];
@@ -12,6 +13,7 @@ interface PersonSwitcherBarProps {
   accentColor: string;
   borderRadius: string;
   langCode?: string;
+  labels?: Partial<LocalizationLabels>;
 }
 
 export const PersonSwitcherBar: React.FC<PersonSwitcherBarProps> = ({
@@ -23,6 +25,7 @@ export const PersonSwitcherBar: React.FC<PersonSwitcherBarProps> = ({
   accentColor,
   borderRadius,
   langCode = 'ru',
+  labels,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -47,12 +50,8 @@ export const PersonSwitcherBar: React.FC<PersonSwitcherBarProps> = ({
     return null;
   }
 
-  const c = (langCode || 'ru').toLowerCase();
-  const deleteTitle = c.startsWith('en')
-    ? 'Delete person'
-    : c.startsWith('pl')
-    ? 'Usuń osobę'
-    : 'Удалить человека';
+  const t = getUITranslations(langCode, labels);
+  const deleteTitle = t.deletePersonTitle;
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     if (!scrollContainerRef.current) return;

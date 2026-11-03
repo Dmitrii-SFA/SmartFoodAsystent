@@ -370,7 +370,7 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
   const handleGenerateRecipeWithAI = async (customDishName?: string) => {
     const targetDish = (customDishName ?? aiDishPrompt ?? recipeName).trim();
     if (!targetDish) {
-      setAiRecipeError('Пожалуйста, впишите название блюда (например: «Борщ с говядиной», «Плов с курицей» или «Цезарь»).');
+      setAiRecipeError(t.errEnterDishNameForAi);
       return;
     }
 
@@ -388,7 +388,7 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
       });
 
       if (!gen || typeof gen !== 'object') {
-        throw new Error('Не удалось сгенерировать рецепт');
+        throw new Error(t.errGenerateRecipeFailed);
       }
 
       const generatedTitle = (gen.name && String(gen.name).trim()) || targetDish;
@@ -694,10 +694,13 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
 
       setCreationMode('culinary');
       setAiRecipeSuccessBanner(
-        `✨ ИИ-шеф расписал рецепт «${generatedTitle}»: посуд — ${normalizedVessels.length}, ингредиентов — ${finalIngredients.length}. Вы можете сразу сохранить рецепт или скорректировать любой шаг.`
+        t.aiChefRecipeReadyBanner
+          .replace('{name}', generatedTitle)
+          .replace('{vessels}', String(normalizedVessels.length))
+          .replace('{ingredients}', String(finalIngredients.length))
       );
     } catch (err: any) {
-      setAiRecipeError(err?.message || 'Ошибка при генерации рецепта с помощью ИИ');
+      setAiRecipeError(err?.message || t.errGenerateRecipeFailed);
     } finally {
       setIsGeneratingAiRecipe(false);
     }
@@ -855,12 +858,7 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
     }
   };
 
-  const shareRecipeTitle =
-    langCode?.startsWith('en')
-      ? 'Share recipe (copy code)'
-      : langCode?.startsWith('pl')
-      ? 'Udostępnij przepis (skopiuj kod)'
-      : 'Поделиться рецептом (скопировать код)';
+  const shareRecipeTitle = t.shareRecipeBtnTitle;
 
   return (
     <div className="space-y-4">
@@ -1874,6 +1872,8 @@ export const RecipesTab: React.FC<RecipesTabProps> = ({
         isOpen={Boolean(activeTimerRecipe)}
         recipe={activeTimerRecipe}
         accentColor={accentColor}
+        langCode={langCode}
+        labels={labels}
         onClose={() => setActiveTimerRecipe(null)}
       />
 

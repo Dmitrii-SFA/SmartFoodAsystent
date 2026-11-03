@@ -44,26 +44,10 @@ export const DaySwipeHeader: React.FC<DaySwipeHeaderProps> = ({
   const t = getUITranslations(langCode, labels);
 
   const c = (langCode || 'ru').toLowerCase();
-  const addPersonTitle = c.startsWith('en')
-    ? 'Add person'
-    : c.startsWith('pl')
-    ? 'Dodaj osobę'
-    : 'Добавить человека';
-  const personNamePlaceholder = c.startsWith('en')
-    ? 'Person name...'
-    : c.startsWith('pl')
-    ? 'Imię osoby...'
-    : 'Имя человека...';
-  const addBtnLabel = c.startsWith('en')
-    ? 'Add'
-    : c.startsWith('pl')
-    ? 'Dodaj'
-    : 'Добавить';
-  const cancelBtnLabel = c.startsWith('en')
-    ? 'Cancel'
-    : c.startsWith('pl')
-    ? 'Anuluj'
-    : 'Отмена';
+  const addPersonTitle = t.addPersonTitle;
+  const personNamePlaceholder = t.personNamePlaceholder;
+  const addBtnLabel = t.add;
+  const cancelBtnLabel = t.cancel;
 
   const handleDateSelect = (dateStr: string) => {
     onSelectDate?.(dateStr);
