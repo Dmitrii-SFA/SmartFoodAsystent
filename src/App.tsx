@@ -31,6 +31,7 @@ import { AddFoodModal } from './components/AddFoodModal';
 import { AIChatDrawer } from './components/AIChatDrawer';
 import { ConfigJsonModal } from './components/ConfigJsonModal';
 import { ApiKeyModal } from './components/ApiKeyModal';
+import { StripeKeyIssuedModal } from './components/StripeKeyIssuedModal';
 import { ResetConfirmModal } from './components/ResetConfirmModal';
 import {
   WelcomeOnboardingModal,
@@ -69,6 +70,8 @@ import {
   getQuotaStatus,
   TRIAL_DAILY_LIMIT,
   ACCESS_KEY_STORAGE_KEY,
+  claimStripeKeyFromWorker,
+  LAST_PURCHASED_STRIPE_KEY_STORAGE_KEY,
 } from './utils/accessControl';
 
 const STORAGE_KEY_SHOPPING_LIST = 'pwa_calorie_shopping_list_v1';
@@ -1098,6 +1101,7 @@ export default function App() {
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [apiKeyModalShowInfo, setApiKeyModalShowInfo] = useState(false);
+  const [issuedStripeKey, setIssuedStripeKey] = useState<string | null>(null);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isAddFoodModalOpen, setIsAddFoodModalOpen] = useState(false);
   const [addFoodInitialCatId, setAddFoodInitialCatId] = useState<string | undefined>(undefined);
@@ -1197,6 +1201,34 @@ export default function App() {
           setConfigToast((prev) => ({ ...prev, visible: false }));
         }, 4500);
       });
+    }
+  }, []);
+
+  // Check for Stripe payment redirect (?session_id=...) and claim key without auto-activation
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const sessionId = params.get('session_id')?.trim();
+      if (!sessionId) return;
+
+      claimStripeKeyFromWorker(sessionId).then((res) => {
+        if (res.key) {
+          try {
+            localStorage.setItem(LAST_PURCHASED_STRIPE_KEY_STORAGE_KEY, res.key);
+          } catch {
+            // ignore
+          }
+          const url = new URL(window.location.href);
+          url.searchParams.delete('session_id');
+          const nextSearch = url.searchParams.toString();
+          const cleanUrl =
+            url.pathname + (nextSearch ? `?${nextSearch}` : '') + (url.hash || '');
+          window.history.replaceState({}, document.title, cleanUrl);
+          setIssuedStripeKey(res.key);
+        }
+      });
+    } catch (e) {
+      console.warn('Error checking Stripe session_id:', e);
     }
   }, []);
 
@@ -2680,6 +2712,14 @@ export default function App() {
         remainingDemoRequests={remainingDemoRequests}
         totalDemoLimit={quotaStatus.dailyLimit}
         initialShowInfo={apiKeyModalShowInfo}
+      />
+
+      {/* Issued Stripe Key Modal (Displayed after Stripe checkout without auto-activation) */}
+      <StripeKeyIssuedModal
+        isOpen={Boolean(issuedStripeKey)}
+        issuedKey={issuedStripeKey}
+        onClose={() => setIssuedStripeKey(null)}
+        themeStyles={themeStyles}
       />
 
       {/* Reset to Factory Defaults Modal */}

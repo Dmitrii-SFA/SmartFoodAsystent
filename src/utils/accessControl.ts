@@ -1803,3 +1803,70 @@ Return strictly a valid JSON object matching this exact structure:
     customPack,
   };
 }
+
+export const LAST_PURCHASED_STRIPE_KEY_STORAGE_KEY = 'last_purchased_stripe_key';
+
+export async function claimStripeKeyFromWorker(
+  sessionId: string
+): Promise<{ key?: string; error?: string }> {
+  const cleanSessionId = (sessionId || '').trim();
+  if (!cleanSessionId) {
+    return { error: 'Не указан session_id' };
+  }
+
+  const candidateUrls: string[] = [
+    'https://api.smartfoodasystent.workers.dev/claim-stripe-key',
+    CLOUDFLARE_WORKER_URL,
+    '/claim-stripe-key',
+    '/api',
+  ];
+  const uniqueUrls = Array.from(new Set(candidateUrls));
+
+  let lastError = 'Не удалось получить ключ после оплаты';
+
+  for (let i = 0; i < uniqueUrls.length; i++) {
+    const endpoint = uniqueUrls[i];
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'claim_stripe_key',
+          session_id: cleanSessionId,
+        }),
+      });
+
+      if ((res.status === 404 || res.status === 405) && i < uniqueUrls.length - 1) {
+        continue;
+      }
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && typeof data?.key === 'string' && data.key.trim()) {
+        const issuedKey = data.key.trim();
+        try {
+          localStorage.setItem(LAST_PURCHASED_STRIPE_KEY_STORAGE_KEY, issuedKey);
+        } catch {
+          // ignore storage error
+        }
+        return { key: issuedKey };
+      }
+
+      if (data?.error) {
+        lastError =
+          typeof data.error === 'string'
+            ? data.error
+            : data.error?.message || lastError;
+      }
+    } catch (err: any) {
+      if (err?.message) {
+        lastError = err.message;
+      }
+    }
+  }
+
+  return { error: lastError };
+}
+

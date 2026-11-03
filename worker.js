@@ -513,6 +513,20 @@ async function verifyAndLoadKeyState({
   };
 }
 
+function generateAccessKey() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const randomSegment = (length = 4) => {
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    let segment = "";
+    for (let i = 0; i < length; i++) {
+      segment += chars[bytes[i] % chars.length];
+    }
+    return segment;
+  };
+  return `SFA-${randomSegment(4)}-${randomSegment(4)}-${randomSegment(4)}`;
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
@@ -543,7 +557,7 @@ export default {
       );
     }
 
-    // Перехватываем все POST-запросы к ИИ и проверке ключей (на /api, /api/* или корень)
+    // Перехватываем все POST-запросы к ИИ и проверке ключей (на /api, /api/*, /claim-stripe-key или корень)
     if (
       request.method === "POST" ||
       pathname === "/api" ||
@@ -554,6 +568,139 @@ export default {
 
       try {
         const requestData = await request.json();
+
+        // 0. Выдача ключа после оплаты в Stripe (POST /claim-stripe-key)
+        if (
+          pathname === "/claim-stripe-key" ||
+          pathname === "/api/claim-stripe-key" ||
+          requestData.action === "claim_stripe_key"
+        ) {
+          const sessionId =
+            typeof requestData.session_id === "string"
+              ? requestData.session_id.trim()
+              : typeof requestData.sessionId === "string"
+              ? requestData.sessionId.trim()
+              : "";
+
+          if (!sessionId) {
+            return new Response(
+              JSON.stringify({ error: "Не передан session_id" }),
+              {
+                status: 400,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              }
+            );
+          }
+
+          const kv = getKvNamespace(env);
+          if (!kv) {
+            return new Response(
+              JSON.stringify({
+                error: "Хранилище USERS_KV не подключено в настройках воркера",
+              }),
+              {
+                status: 500,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              }
+            );
+          }
+
+          const sessionKvKey = `stripe_session_${sessionId}`;
+          const existingKey = await kv.get(sessionKvKey);
+          if (existingKey && typeof existingKey === "string" && existingKey.trim()) {
+            return new Response(
+              JSON.stringify({ key: existingKey.trim() }),
+              {
+                status: 200,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              }
+            );
+          }
+
+          const stripeSecretKey =
+            typeof env?.STRIPE_SECRET_KEY === "string"
+              ? env.STRIPE_SECRET_KEY.trim()
+              : "";
+
+          if (!stripeSecretKey) {
+            return new Response(
+              JSON.stringify({
+                error: "STRIPE_SECRET_KEY не настроен в переменных окружения воркера",
+              }),
+              {
+                status: 500,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              }
+            );
+          }
+
+          const stripeRes = await fetch(
+            `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`,
+            {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${stripeSecretKey}`,
+              },
+            }
+          );
+
+          const stripeSession = await stripeRes.json();
+
+          if (!stripeRes.ok) {
+            return new Response(
+              JSON.stringify({
+                error:
+                  stripeSession?.error?.message ||
+                  "Ошибка при проверке сессии оплаты в Stripe",
+              }),
+              {
+                status: stripeRes.status,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              }
+            );
+          }
+
+          if (stripeSession.payment_status !== "paid") {
+            return new Response(
+              JSON.stringify({
+                error: "Оплата по данной сессии еще не завершена",
+                payment_status: stripeSession.payment_status,
+              }),
+              {
+                status: 402,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              }
+            );
+          }
+
+          let newKey = generateAccessKey();
+          for (let attempt = 0; attempt < 5; attempt++) {
+            const collision = await kv.get(newKey);
+            if (collision === null || collision === undefined) break;
+            newKey = generateAccessKey();
+          }
+
+          await kv.put(
+            newKey,
+            JSON.stringify({
+              remaining: PACKAGE_REQUESTS_LIMIT,
+              initialLimit: PACKAGE_REQUESTS_LIMIT,
+              devices: [],
+              carryoverApplied: false,
+            })
+          );
+
+          await kv.put(sessionKvKey, newKey);
+
+          return new Response(
+            JSON.stringify({ key: newKey }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            }
+          );
+        }
+
         const headerKey =
           request.headers.get("x-access-token") ||
           request.headers.get("x-access-key") ||

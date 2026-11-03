@@ -488,6 +488,20 @@ async function verifyAndLoadKeyState({
   };
 }
 
+function generateAccessKey() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const randomSegment = (length = 4) => {
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    let segment = "";
+    for (let i = 0; i < length; i++) {
+      segment += chars[bytes[i] % chars.length];
+    }
+    return segment;
+  };
+  return `SFA-${randomSegment(4)}-${randomSegment(4)}-${randomSegment(4)}`;
+}
+
 export async function onRequestOptions() {
   return new Response(null, { status: 204, headers: corsHeaders });
 }
@@ -512,6 +526,140 @@ export async function onRequestPost(context) {
 
   try {
     const requestData = await context.request.json();
+    const url = new URL(context.request.url);
+    const pathname = url.pathname.replace(/\/+$/, "") || "/";
+
+    if (
+      pathname === "/claim-stripe-key" ||
+      pathname === "/api/claim-stripe-key" ||
+      requestData.action === "claim_stripe_key"
+    ) {
+      const sessionId =
+        typeof requestData.session_id === "string"
+          ? requestData.session_id.trim()
+          : typeof requestData.sessionId === "string"
+          ? requestData.sessionId.trim()
+          : "";
+
+      if (!sessionId) {
+        return new Response(
+          JSON.stringify({ error: "Не передан session_id" }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      const kv = getKvNamespace(context.env);
+      if (!kv) {
+        return new Response(
+          JSON.stringify({
+            error: "Хранилище USERS_KV не подключено в настройках",
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      const sessionKvKey = `stripe_session_${sessionId}`;
+      const existingKey = await kv.get(sessionKvKey);
+      if (existingKey && typeof existingKey === "string" && existingKey.trim()) {
+        return new Response(
+          JSON.stringify({ key: existingKey.trim() }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      const stripeSecretKey =
+        typeof context.env?.STRIPE_SECRET_KEY === "string"
+          ? context.env.STRIPE_SECRET_KEY.trim()
+          : "";
+
+      if (!stripeSecretKey) {
+        return new Response(
+          JSON.stringify({
+            error: "STRIPE_SECRET_KEY не настроен в переменных окружения",
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      const stripeRes = await fetch(
+        `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${stripeSecretKey}`,
+          },
+        }
+      );
+
+      const stripeSession = await stripeRes.json();
+
+      if (!stripeRes.ok) {
+        return new Response(
+          JSON.stringify({
+            error:
+              stripeSession?.error?.message ||
+              "Ошибка при проверке сессии оплаты в Stripe",
+          }),
+          {
+            status: stripeRes.status,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      if (stripeSession.payment_status !== "paid") {
+        return new Response(
+          JSON.stringify({
+            error: "Оплата по данной сессии еще не завершена",
+            payment_status: stripeSession.payment_status,
+          }),
+          {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      let newKey = generateAccessKey();
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const collision = await kv.get(newKey);
+        if (collision === null || collision === undefined) break;
+        newKey = generateAccessKey();
+      }
+
+      await kv.put(
+        newKey,
+        JSON.stringify({
+          remaining: PACKAGE_REQUESTS_LIMIT,
+          initialLimit: PACKAGE_REQUESTS_LIMIT,
+          devices: [],
+          carryoverApplied: false,
+        })
+      );
+
+      await kv.put(sessionKvKey, newKey);
+
+      return new Response(
+        JSON.stringify({ key: newKey }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
     const headerKey =
       context.request.headers.get("x-access-token") ||
       context.request.headers.get("x-access-key") ||
