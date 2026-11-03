@@ -13,7 +13,7 @@ export const CLOUDFLARE_WORKER_URL = 'https://api.smartfoodasystent.workers.dev/
 // ССЫЛКА НА ОПЛАТУ ДОПОЛНИТЕЛЬНОГО ПАКЕТА НА 500 ИИ-ЗАПРОСОВ (BLIK И КАРТЫ)
 // Замените этот URL-заглушку на вашу реальную платежную ссылку (Stripe, Przelewy24, HotPay и т.д.)
 // ============================================================================
-export const PAYMENT_PACKAGE_500_URL = 'https://buy.stripe.com/test_placeholder_500_requests';
+export const PAYMENT_PACKAGE_500_URL = 'https://buy.stripe.com/test_5kQfZh2So9PsfthcCTa3u00';
 export const STRIPE_PAYMENT_URL = PAYMENT_PACKAGE_500_URL;
 
 export const ACCESS_KEY_STORAGE_KEY = 'app_access_key';
