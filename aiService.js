@@ -11,8 +11,15 @@ import { GoogleGenAI } from '@google/genai';
  * @property {string} [model]
  */
 
+export const GEMINI_FALLBACK_MODELS = [
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash-lite',
+];
+
 export const DEFAULT_MODELS = {
-  gemini: 'gemini-3.8-flash',
+  gemini: 'gemini-3.5-flash-lite',
   openai: 'gpt-4o-mini',
   openrouter: 'meta-llama/llama-3.3-70b-instruct',
   custom: 'gpt-4o-mini',
@@ -45,6 +52,36 @@ export function getGeminiClient(customApiKey) {
       },
     },
   });
+}
+
+/**
+ * Sequential fallback across Gemini 3.5 Flash Lite -> 3.1 Flash Lite -> 2.5 Flash Lite -> 2.0 Flash Lite
+ * @param {GoogleGenAI} client
+ * @param {Object} params
+ * @param {any} params.contents
+ * @param {any} [params.config]
+ * @returns {Promise<{ text: string; usedModel: string }>}
+ */
+async function callGeminiWithFallback(client, { contents, config }) {
+  for (const modelName of GEMINI_FALLBACK_MODELS) {
+    try {
+      const resp = await client.models.generateContent({
+        model: modelName,
+        contents,
+        config,
+      });
+      if (resp && typeof resp.text === 'string' && resp.text.trim().length > 0) {
+        return { text: resp.text.trim(), usedModel: modelName };
+      }
+    } catch (/** @type {any} */ err) {
+      console.warn(`[aiService] Gemini model ${modelName} failed, trying next fallback:`, err?.message || err);
+    }
+  }
+  const overloadedError = new Error(
+    'Все модели ИИ сейчас перегружены (Gemini 3.5 Flash Lite → Gemini 3.1 Flash Lite → Gemini 2.5 Flash Lite → Gemini 2.0 Flash Lite). Пожалуйста, попробуйте чуть позже.'
+  );
+  /** @type {any} */ (overloadedError).code = 'ALL_MODELS_OVERLOADED';
+  throw overloadedError;
 }
 
 /**
@@ -170,19 +207,17 @@ export const aiService = {
         if (!client) {
           throw new Error('API-ключ Google Gemini не указан.');
         }
-        const response = await client.models.generateContent({
-          model: config.model || DEFAULT_MODELS.gemini,
+        const { usedModel } = await callGeminiWithFallback(client, {
           contents: 'Ответь кратко JSON: {"status": "ok"}',
           config: { responseMimeType: 'application/json' },
         });
         const latency = Date.now() - startTime;
-        if (!response.text) throw new Error('Пустой ответ от Gemini');
         return {
           success: true,
-          message: `Соединение с Google Gemini успешно установлено (${latency}мс). Модель: ${config.model}`,
+          message: `Соединение с Google Gemini успешно установлено (${latency}мс). Модель: ${usedModel}`,
           latencyMs: latency,
           provider: 'gemini',
-          model: config.model || DEFAULT_MODELS.gemini,
+          model: usedModel,
         };
       }
 
@@ -284,38 +319,14 @@ Return your response strictly as valid JSON adhering to this structure:
         throw new Error('NO_API_KEY');
       }
 
-      const candidateModels = [
-        config.model || 'gemini-3.8-flash',
-        'gemini-3.8-flash',
-        'gemini-flash-latest',
-        'gemini-3.1-flash-lite',
-      ];
-      const uniqueModels = [...new Set(candidateModels)];
-
-      let lastErr = null;
-      for (const m of uniqueModels) {
-        try {
-          const resp = await client.models.generateContent({
-            model: m,
-            contents: promptText,
-            config: {
-              systemInstruction,
-              responseMimeType: 'application/json',
-            },
-          });
-          if (resp.text) {
-            responseText = resp.text.trim();
-            break;
-          }
-        } catch (/** @type {any} */ err) {
-          lastErr = err;
-          console.warn(`[aiService] Gemini model ${m} error:`, err?.message || err);
-        }
-      }
-
-      if (!responseText) {
-        throw lastErr || new Error('All Gemini candidate models failed');
-      }
+      const { text } = await callGeminiWithFallback(client, {
+        contents: promptText,
+        config: {
+          systemInstruction,
+          responseMimeType: 'application/json',
+        },
+      });
+      responseText = text;
     } else {
       // OpenAI-compatible (ChatGPT, OpenRouter, Custom)
       const messages = [
@@ -380,12 +391,11 @@ Return a JSON object with:
       const client = getGeminiClient(config.apiKey);
       if (!client) throw new Error('API key missing for Gemini');
 
-      const resp = await client.models.generateContent({
-        model: config.model || 'gemini-3.8-flash',
+      const { text } = await callGeminiWithFallback(client, {
         contents: prompt,
         config: { responseMimeType: 'application/json' },
       });
-      responseText = resp.text || '{}';
+      responseText = text || '{}';
     } else {
       responseText = await callOpenAICompatible({
         baseURL: config.baseURL || DEFAULT_BASE_URLS[config.provider] || DEFAULT_BASE_URLS.openai,
@@ -476,8 +486,7 @@ Output strictly JSON matching this structure:
       const client = getGeminiClient(config.apiKey);
       if (!client) throw new Error('API Key missing for Gemini');
 
-      const response = await client.models.generateContent({
-        model: config.model || 'gemini-3.8-flash',
+      const { text } = await callGeminiWithFallback(client, {
         contents: [
           {
             role: 'user',
@@ -494,7 +503,7 @@ Output strictly JSON matching this structure:
         ],
         config: { responseMimeType: 'application/json' },
       });
-      responseText = response.text || '{}';
+      responseText = text || '{}';
     } else {
       // Vision in OpenAI standard: content array with text and image_url
       const messages = [
@@ -580,12 +589,11 @@ Return STRICT JSON:
       const client = getGeminiClient(config.apiKey);
       if (!client) throw new Error('API Key missing for Gemini');
 
-      const response = await client.models.generateContent({
-        model: config.model || 'gemini-3.8-flash',
+      const { text } = await callGeminiWithFallback(client, {
         contents: prompt,
         config: { responseMimeType: 'application/json' },
       });
-      responseText = response.text || '{}';
+      responseText = text || '{}';
     } else {
       responseText = await callOpenAICompatible({
         baseURL: config.baseURL || DEFAULT_BASE_URLS[config.provider] || DEFAULT_BASE_URLS.openai,
@@ -642,12 +650,11 @@ Return STRICT JSON:
       const client = getGeminiClient(config.apiKey);
       if (!client) throw new Error('API key missing for Gemini');
 
-      const response = await client.models.generateContent({
-        model: config.model || 'gemini-3.8-flash',
+      const { text } = await callGeminiWithFallback(client, {
         contents: prompt,
         config: { responseMimeType: 'application/json' },
       });
-      responseText = response.text || '{}';
+      responseText = text || '{}';
     } else {
       responseText = await callOpenAICompatible({
         baseURL: config.baseURL || DEFAULT_BASE_URLS[config.provider] || DEFAULT_BASE_URLS.openai,
@@ -719,12 +726,11 @@ ${JSON.stringify(vessels, null, 2)}
       const client = getGeminiClient(config.apiKey);
       if (!client) throw new Error('API key missing for Gemini');
 
-      const response = await client.models.generateContent({
-        model: config.model || 'gemini-3.8-flash',
+      const { text } = await callGeminiWithFallback(client, {
         contents: prompt,
         config: { responseMimeType: 'application/json' },
       });
-      responseText = response.text || '{}';
+      responseText = text || '{}';
     } else {
       responseText = await callOpenAICompatible({
         baseURL: config.baseURL || DEFAULT_BASE_URLS[config.provider] || DEFAULT_BASE_URLS.openai,
@@ -866,37 +872,13 @@ ${JSON.stringify(vessels, null, 2)}
       const client = getGeminiClient(config.apiKey);
       if (!client) throw new Error('API key missing for Gemini');
 
-      const candidateModels = [
-        config.model || 'gemini-3.8-flash',
-        'gemini-3.8-flash',
-        'gemini-flash-latest',
-        'gemini-3.1-flash-lite',
-      ];
-      const uniqueModels = [...new Set(candidateModels)];
-
-      let lastErr = null;
-      for (const m of uniqueModels) {
-        try {
-          const resp = await client.models.generateContent({
-            model: m,
-            contents: prompt,
-            config: {
-              responseMimeType: 'application/json',
-            },
-          });
-          if (resp.text) {
-            responseText = resp.text.trim();
-            break;
-          }
-        } catch (/** @type {any} */ err) {
-          lastErr = err;
-          console.warn(`[aiService.generateRecipeByDishName] Gemini model ${m} error:`, err?.message || err);
-        }
-      }
-
-      if (!responseText) {
-        throw lastErr || new Error('All Gemini candidate models failed');
-      }
+      const { text } = await callGeminiWithFallback(client, {
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+        },
+      });
+      responseText = text;
     } else {
       responseText = await callOpenAICompatible({
         baseURL: config.baseURL || DEFAULT_BASE_URLS[config.provider] || DEFAULT_BASE_URLS.openai,

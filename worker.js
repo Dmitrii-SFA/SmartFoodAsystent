@@ -906,8 +906,12 @@ export default {
           );
         }
 
-        const targetModel = requestData.model || "gemini-3.5-flash-lite";
-        const googleUrl = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
+        const FALLBACK_MODELS = [
+          "gemini-3.5-flash-lite",
+          "gemini-3.1-flash-lite",
+          "gemini-2.5-flash-lite",
+          "gemini-2.0-flash-lite",
+        ];
 
         const geminiPayload = {
           contents: requestData.contents,
@@ -916,30 +920,54 @@ export default {
             : {}),
         };
 
-        const geminiResponse = await fetch(googleUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(geminiPayload),
-        });
+        let result = null;
+        let hasValidCandidate = false;
+        let usedModel = "";
 
-        const result = await geminiResponse.json();
+        for (const modelName of FALLBACK_MODELS) {
+          const googleUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+          try {
+            const geminiResponse = await fetch(googleUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(geminiPayload),
+            });
 
-        // Проверяем, что ответ от Gemini успешный (статус 200) и содержит корректный текст
-        const hasValidCandidate = Boolean(
-          geminiResponse.status === 200 &&
-            result &&
-            !result.error &&
-            result.candidates &&
-            result.candidates[0]?.content?.parts?.[0]?.text
-        );
+            const candidateResult = await geminiResponse.json().catch(() => null);
 
-        if (!hasValidCandidate) {
-          if (recordedRateLimit) rollbackLastRateLimitTimestamp(clientRateKey);
-          return new Response(JSON.stringify(result), {
-            status: geminiResponse.ok ? 502 : geminiResponse.status,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+            if (
+              geminiResponse.status === 200 &&
+              candidateResult &&
+              !candidateResult.error &&
+              candidateResult.candidates &&
+              candidateResult.candidates[0]?.content?.parts?.[0]?.text
+            ) {
+              result = candidateResult;
+              hasValidCandidate = true;
+              usedModel = modelName;
+              break;
+            }
+          } catch (modelErr) {
+            console.warn(`Model ${modelName} failed, trying next fallback:`, modelErr);
+          }
         }
+
+        if (!hasValidCandidate || !result) {
+          if (recordedRateLimit) rollbackLastRateLimitTimestamp(clientRateKey);
+          return new Response(
+            JSON.stringify({
+              error:
+                "Все модели ИИ сейчас перегружены (Gemini 3.5 Flash Lite → Gemini 3.1 Flash Lite → Gemini 2.5 Flash Lite → Gemini 2.0 Flash Lite). Запрос не был списан, пожалуйста, попробуйте чуть позже.",
+              code: "ALL_MODELS_OVERLOADED",
+            }),
+            {
+              status: 503,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            }
+          );
+        }
+
+        result.usedModel = usedModel;
 
         // 5. При успешном ответе от ИИ уменьшаем remaining на 1, сохраняем обновлённый JSON в USERS_KV и возвращаем остаток клиенту
         let updatedRemaining = null;

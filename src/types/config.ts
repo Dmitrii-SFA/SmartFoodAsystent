@@ -101,6 +101,8 @@ export interface LocalizationLabels {
   tabShoppingList?: string;
   tabShoppingListShort?: string;
   tabSettings?: string;
+  waterProductName?: string;
+  [key: string]: string | undefined;
 
   // Day swipe header
   todayBadge?: string;

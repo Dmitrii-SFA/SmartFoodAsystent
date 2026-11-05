@@ -435,6 +435,7 @@ export interface ExtendedLocalizationLabels extends LocalizationLabels {
   timerResumeBtn: string;
   timerStartBtn: string;
   timerResetStepTitle: string;
+  errAllModelsOverloaded: string;
 }
 
 export const COMPLETE_RUSSIAN_LABELS: ExtendedLocalizationLabels = {
@@ -897,6 +898,7 @@ export const COMPLETE_RUSSIAN_LABELS: ExtendedLocalizationLabels = {
   timerResumeBtn: 'Продолжить',
   timerStartBtn: 'Старт',
   timerResetStepTitle: 'Сбросить шаг',
+  errAllModelsOverloaded: 'Все модели ИИ сейчас перегружены (Gemini 3.5 Flash Lite → Gemini 3.1 Flash Lite → Gemini 2.5 Flash Lite → Gemini 2.0 Flash Lite). Запрос не был списан, пожалуйста, попробуйте чуть позже.',
 };
 
 export const COMPLETE_ENGLISH_LABELS: ExtendedLocalizationLabels = {
@@ -1359,6 +1361,7 @@ export const COMPLETE_ENGLISH_LABELS: ExtendedLocalizationLabels = {
   timerResumeBtn: 'Resume',
   timerStartBtn: 'Start',
   timerResetStepTitle: 'Reset step',
+  errAllModelsOverloaded: 'All AI models are currently overloaded (Gemini 3.5 Flash Lite → Gemini 3.1 Flash Lite → Gemini 2.5 Flash Lite → Gemini 2.0 Flash Lite). No request was deducted, please try again shortly.',
 };
 
 export const COMPLETE_POLISH_LABELS: ExtendedLocalizationLabels = {
@@ -1821,6 +1824,7 @@ export const COMPLETE_POLISH_LABELS: ExtendedLocalizationLabels = {
   timerResumeBtn: 'Wznów',
   timerStartBtn: 'Start',
   timerResetStepTitle: 'Resetuj krok',
+  errAllModelsOverloaded: 'Wszystkie modele AI są obecnie przeciążone (Gemini 3.5 Flash Lite → Gemini 3.1 Flash Lite → Gemini 2.5 Flash Lite → Gemini 2.0 Flash Lite). Zapytanie nie zostało pobrane, spróbuj ponownie za chwilę.',
 };
 
 export function getWaterProductName(langCode: string = 'ru', customWaterName?: string): string {

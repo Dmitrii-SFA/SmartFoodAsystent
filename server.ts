@@ -1440,8 +1440,12 @@ app.post(['/api', '/api/verify-key'], async (req: Request, res: Response) => {
       return;
     }
 
-    const targetModel = requestData.model || 'gemini-3.5-flash-lite';
-    const googleUrl = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
+    const FALLBACK_MODELS = [
+      'gemini-3.5-flash-lite',
+      'gemini-3.1-flash-lite',
+      'gemini-2.5-flash-lite',
+      'gemini-2.0-flash-lite',
+    ];
 
     const geminiPayload = {
       contents: requestData.contents,
@@ -1450,26 +1454,49 @@ app.post(['/api', '/api/verify-key'], async (req: Request, res: Response) => {
         : {}),
     };
 
-    const geminiResponse = await fetch(googleUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(geminiPayload),
-    });
+    let result: any = null;
+    let hasValidCandidate = false;
+    let usedModel = '';
 
-    const result: any = await geminiResponse.json();
-    const hasValidCandidate = Boolean(
-      geminiResponse.ok &&
-        result &&
-        !result.error &&
-        result.candidates &&
-        result.candidates[0]?.content?.parts?.[0]?.text
-    );
+    for (const modelName of FALLBACK_MODELS) {
+      const googleUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      try {
+        const geminiResponse = await fetch(googleUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(geminiPayload),
+        });
 
-    if (!hasValidCandidate) {
+        const candidateResult: any = await geminiResponse.json().catch(() => null);
+
+        if (
+          geminiResponse.ok &&
+          candidateResult &&
+          !candidateResult.error &&
+          candidateResult.candidates &&
+          candidateResult.candidates[0]?.content?.parts?.[0]?.text
+        ) {
+          result = candidateResult;
+          hasValidCandidate = true;
+          usedModel = modelName;
+          break;
+        }
+      } catch (modelErr) {
+        console.warn(`[server.ts] Model ${modelName} failed, trying next fallback:`, modelErr);
+      }
+    }
+
+    if (!hasValidCandidate || !result) {
       if (recordedRateLimit) rollbackServerRateLimit(clientRateKey);
-      res.status(geminiResponse.ok ? 502 : geminiResponse.status).json(result);
+      res.status(503).json({
+        error:
+          'Все модели ИИ сейчас перегружены (Gemini 3.5 Flash Lite → Gemini 3.1 Flash Lite → Gemini 2.5 Flash Lite → Gemini 2.0 Flash Lite). Запрос не был списан, пожалуйста, попробуйте чуть позже.',
+        code: 'ALL_MODELS_OVERLOADED',
+      });
       return;
     }
+
+    result.usedModel = usedModel;
 
     // 4. Deduct 1 request ONLY on successful and valid AI response
     let updatedRemaining: number | null = null;

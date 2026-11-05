@@ -1,5 +1,5 @@
 import { MetricConfig, UserConfig, LanguageOption, CustomLanguagePack } from '../types/config';
-import { COMPLETE_ENGLISH_LABELS } from './translations';
+import { COMPLETE_ENGLISH_LABELS, getUITranslations } from './translations';
 import {
   METRIC_TRANSLATIONS,
   METRIC_SHORT_TRANSLATIONS,
@@ -964,33 +964,29 @@ export async function callCloudflareWorkerAI(payload: {
 
   const pendingCarryoverBonus = savedAccessKey ? getKeyCarryoverBonus(savedAccessKey) : 0;
 
-  const requestBody: Record<string, any> = {
-    contents: [
-      {
-        role: 'user',
-        parts,
-      },
-    ],
-    generationConfig: {
-      responseMimeType: 'application/json',
-      temperature: 0.2,
-      ...(payload.maxOutputTokens ? { maxOutputTokens: payload.maxOutputTokens } : {}),
-    },
-    accessKey: savedAccessKey || '',
-    deviceId,
-    ...(pendingCarryoverBonus > 0 ? { carryoverRequests: pendingCarryoverBonus } : {}),
-    action: payload.action || 'ai_request',
-    ...(payload.extraPayload || {}),
-  };
+  const AI_FALLBACK_MODELS = [
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
+    'gemini-2.5-flash-lite',
+    'gemini-2.0-flash-lite',
+  ] as const;
 
-  const requestInit: RequestInit = {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-access-token': savedAccessKey || '',
-      'x-device-id': deviceId,
-    },
-    body: JSON.stringify(requestBody),
+  const getLocalizedOverloadMessage = (): string => {
+    try {
+      const raw = localStorage.getItem('pwa_calorie_user_config_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const langCode = parsed?.language?.code || 'ru';
+        const customLabels = parsed?.language?.labels;
+        const t = getUITranslations(langCode, customLabels);
+        if (t.errAllModelsOverloaded) {
+          return t.errAllModelsOverloaded;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return 'Все модели ИИ сейчас перегружены (Gemini 3.5 Flash Lite → Gemini 3.1 Flash Lite → Gemini 2.5 Flash Lite → Gemini 2.0 Flash Lite). Запрос не был списан, пожалуйста, попробуйте чуть позже.';
   };
 
   const candidateUrls: string[] = [
@@ -1001,125 +997,178 @@ export async function callCloudflareWorkerAI(payload: {
   const uniqueUrls = Array.from(new Set(candidateUrls));
 
   let response: Response | null = null;
+  let data: any = null;
+  let parsedResult: any = null;
   let lastNetworkError: any = null;
 
-  for (let i = 0; i < uniqueUrls.length; i++) {
-    const endpoint = uniqueUrls[i];
-    try {
-      const res = await fetch(endpoint, requestInit);
-      if ((res.status === 404 || res.status === 405) && i < uniqueUrls.length - 1) {
+  for (let mIdx = 0; mIdx < AI_FALLBACK_MODELS.length; mIdx++) {
+    const currentModel = AI_FALLBACK_MODELS[mIdx];
+
+    const requestBody: Record<string, any> = {
+      model: currentModel,
+      contents: [
+        {
+          role: 'user',
+          parts,
+        },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        temperature: 0.2,
+        ...(payload.maxOutputTokens ? { maxOutputTokens: payload.maxOutputTokens } : {}),
+      },
+      accessKey: savedAccessKey || '',
+      deviceId,
+      ...(pendingCarryoverBonus > 0 ? { carryoverRequests: pendingCarryoverBonus } : {}),
+      action: payload.action || 'ai_request',
+      ...(payload.extraPayload || {}),
+    };
+
+    const requestInit: RequestInit = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-access-token': savedAccessKey || '',
+        'x-device-id': deviceId,
+      },
+      body: JSON.stringify(requestBody),
+    };
+
+    let currentResponse: Response | null = null;
+
+    for (let i = 0; i < uniqueUrls.length; i++) {
+      const endpoint = uniqueUrls[i];
+      try {
+        const res = await fetch(endpoint, requestInit);
+        if ((res.status === 404 || res.status === 405) && i < uniqueUrls.length - 1) {
+          continue;
+        }
+        currentResponse = res;
+        break;
+      } catch (netErr) {
+        lastNetworkError = netErr;
+      }
+    }
+
+    if (!currentResponse) {
+      continue;
+    }
+
+    if (
+      currentResponse.status === 401 ||
+      currentResponse.status === 402 ||
+      currentResponse.status === 403 ||
+      currentResponse.status === 429
+    ) {
+      let errText = '';
+      let errCode = '';
+      let errRemaining: number | undefined = undefined;
+      let errWaitSeconds: number | undefined = undefined;
+
+      try {
+        const errJson = await currentResponse.json();
+        errText = errJson?.error?.message || errJson?.error || errJson?.message || '';
+        errCode = errJson?.code || '';
+        if (typeof errJson?.remainingRequests === 'number') {
+          errRemaining = errJson.remainingRequests;
+        }
+        if (typeof errJson?.waitSeconds === 'number') {
+          errWaitSeconds = errJson.waitSeconds;
+        }
+      } catch {
+        // ignore
+      }
+
+      // Если это минутный лимит (3 запроса в минуту) или пауза 10 секунд — НЕ открываем окно покупки
+      if (errCode === 'COOLDOWN' || errCode === 'RATE_LIMIT') {
+        throw new AiQuotaError(
+          'cooldown',
+          errText || 'Пожалуйста, подождите 10 секунд перед следующим запросом (лимит 3 запроса в минуту).',
+          errWaitSeconds
+        );
+      }
+
+      // Если 429 вернула сама модель Gemini (перегрузка квоты модели), пробуем следующую модель в цепочке
+      if (currentResponse.status === 429) {
         continue;
       }
-      response = res;
-      break;
-    } catch (netErr) {
-      lastNetworkError = netErr;
-      if (i === uniqueUrls.length - 1) {
-        rollbackLastRequestTimestamp();
-        throw netErr;
+
+      // При исчерпании 500 запросов по ключу синхронизируем баланс с нулем
+      if (savedAccessKey && (errCode === 'KEY_EXHAUSTED' || errRemaining === 0)) {
+        setKeyRemainingBalance(savedAccessKey, 0);
+        setKeyCarryoverBonus(savedAccessKey, 0);
       }
-    }
-  }
 
-  if (!response) {
-    rollbackLastRequestTimestamp();
-    throw lastNetworkError || new Error('Не удалось связаться с сервером ИИ');
-  }
-
-  if (
-    response.status === 401 ||
-    response.status === 402 ||
-    response.status === 403 ||
-    response.status === 429
-  ) {
-    let errText = '';
-    let errCode = '';
-    let errRemaining: number | undefined = undefined;
-    let errWaitSeconds: number | undefined = undefined;
-
-    try {
-      const errJson = await response.json();
-      errText = errJson?.error?.message || errJson?.error || errJson?.message || '';
-      errCode = errJson?.code || '';
-      if (typeof errJson?.remainingRequests === 'number') {
-        errRemaining = errJson.remainingRequests;
-      }
-      if (typeof errJson?.waitSeconds === 'number') {
-        errWaitSeconds = errJson.waitSeconds;
-      }
-    } catch {
-      // ignore
-    }
-
-    // Если это минутный лимит (3 запроса в минуту) или пауза 10 секунд — НЕ открываем окно покупки
-    if (response.status === 429 || errCode === 'COOLDOWN' || errCode === 'RATE_LIMIT') {
+      rollbackLastRequestTimestamp();
+      payload.onOpenPaywall?.();
       throw new AiQuotaError(
-        'cooldown',
-        errText || 'Пожалуйста, подождите 10 секунд перед следующим запросом (лимит 3 запроса в минуту).',
-        errWaitSeconds
+        'daily_limit_reached',
+        errText ||
+          (savedAccessKey
+            ? 'Лимит запросов по ключу исчерпан или превышен лимит устройств (максимум 2 устройства). Пожалуйста, введите новый ключ.'
+            : 'Стартовый пакет из 100 бесплатных ИИ-запросов исчерпан. Приобретите пакет на 500 запросов или введите ключ активации.')
       );
     }
 
-    // При исчерпании 500 запросов по ключу синхронизируем баланс с нулем
-    if (savedAccessKey && (errCode === 'KEY_EXHAUSTED' || errRemaining === 0)) {
-      setKeyRemainingBalance(savedAccessKey, 0);
-      setKeyCarryoverBonus(savedAccessKey, 0);
+    if (!currentResponse.ok) {
+      let errCode = '';
+      try {
+        const errData = await currentResponse.json();
+        errCode = errData?.code || '';
+      } catch {
+        // ignore
+      }
+      // Если сервер/воркер уже сам прошёл по всем 4 моделям и вернул ALL_MODELS_OVERLOADED — выходим из цикла
+      if (errCode === 'ALL_MODELS_OVERLOADED') {
+        break;
+      }
+      // Иначе пробуем следующую модель из цепочки (3.5 -> 3.1 -> 2.5 -> 2.0)
+      continue;
     }
 
-    rollbackLastRequestTimestamp();
-    payload.onOpenPaywall?.();
-    throw new AiQuotaError(
-      'daily_limit_reached',
-      errText ||
-        (savedAccessKey
-          ? 'Лимит запросов по ключу исчерпан или превышен лимит устройств (максимум 2 устройства). Пожалуйста, введите новый ключ.'
-          : 'Стартовый пакет из 100 бесплатных ИИ-запросов исчерпан. Приобретите пакет на 500 запросов или введите ключ активации.')
-    );
-  }
-
-  if (!response.ok) {
-    rollbackLastRequestTimestamp();
-    let errMsg = `Ошибка сервера ИИ (${response.status})`;
     try {
-      const errData = await response.json();
-      errMsg = errData?.error?.message || errData?.error || errData?.message || errMsg;
+      const candidateData = await currentResponse.json();
+      let candidateParsed: any = null;
+
+      const candidateText = candidateData?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (typeof candidateText === 'string' && candidateText.trim()) {
+        candidateParsed = extractJsonFromText(candidateText);
+      } else if (typeof candidateData?.text === 'string' && candidateData.text.trim()) {
+        candidateParsed = extractJsonFromText(candidateData.text);
+      } else if (typeof candidateData?.result === 'string' && candidateData.result.trim()) {
+        candidateParsed = extractJsonFromText(candidateData.result);
+      } else if (
+        typeof candidateData?.choices?.[0]?.message?.content === 'string' &&
+        candidateData.choices[0].message.content.trim()
+      ) {
+        candidateParsed = extractJsonFromText(candidateData.choices[0].message.content);
+      } else if (
+        candidateData &&
+        typeof candidateData === 'object' &&
+        !candidateData.error &&
+        !candidateData.candidates
+      ) {
+        candidateParsed = candidateData;
+      }
+
+      if (candidateParsed && typeof candidateParsed === 'object') {
+        response = currentResponse;
+        data = candidateData;
+        parsedResult = candidateParsed;
+        break;
+      }
     } catch {
-      // ignore
+      // Если конкретная модель вернула неполный JSON — пробуем следующую модель в цепочке
+      continue;
     }
-    throw new Error(errMsg);
   }
 
-  let data: any;
-  try {
-    data = await response.json();
-  } catch (parseErr) {
+  if (!response || !parsedResult || typeof parsedResult !== 'object') {
     rollbackLastRequestTimestamp();
-    throw new Error('Получен некорректный ответ от сервера ИИ');
-  }
-
-  // Сначала проверяем и парсим ответ от нейросети (чтобы убедиться, что он успешный и корректный)
-  let parsedResult: any = null;
-  try {
-    const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (typeof candidateText === 'string' && candidateText.trim()) {
-      parsedResult = extractJsonFromText(candidateText);
-    } else if (typeof data?.text === 'string' && data.text.trim()) {
-      parsedResult = extractJsonFromText(data.text);
-    } else if (typeof data?.result === 'string' && data.result.trim()) {
-      parsedResult = extractJsonFromText(data.result);
-    } else if (typeof data?.choices?.[0]?.message?.content === 'string' && data.choices[0].message.content.trim()) {
-      parsedResult = extractJsonFromText(data.choices[0].message.content);
-    } else if (data && typeof data === 'object' && !data.error && !data.candidates) {
-      parsedResult = data;
+    if (!response && lastNetworkError && typeof navigator !== 'undefined' && navigator.onLine === false) {
+      throw lastNetworkError;
     }
-  } catch (jsonErr) {
-    rollbackLastRequestTimestamp();
-    throw new Error('Нейросеть вернула неполный ответ. Запрос не был списан, попробуйте ещё раз.');
-  }
-
-  if (!parsedResult || typeof parsedResult !== 'object') {
-    rollbackLastRequestTimestamp();
-    throw new Error('Пустой ответ от нейросети. Запрос не был списан.');
+    throw new Error(getLocalizedOverloadMessage());
   }
 
   // Списываем 1 запрос ТОЛЬКО после того, как получен успешный и корректный ответ от ИИ

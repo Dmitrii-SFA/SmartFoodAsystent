@@ -234,7 +234,7 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
               <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
                 <span>Gemini Flash</span>
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  gemini-3.8-flash
+                  gemini-3.5-flash-lite
                 </span>
               </h3>
               <p className="text-[10px] text-slate-400">
