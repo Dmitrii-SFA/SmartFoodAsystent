@@ -582,12 +582,14 @@ export default function App() {
         nutrientsPer100g[k] = Math.round((numVal / weight) * 100 * 10) / 10;
       }
     });
+    const ts = item.timestamp || Date.now();
     return {
       id: `lib-log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       name: item.name.trim(),
       servingSizeGrams: 100,
       nutrients: nutrientsPer100g,
-      createdAt: item.timestamp || Date.now(),
+      createdAt: ts,
+      lastUsedAt: ts,
       source: 'manual',
     };
   };
@@ -1479,7 +1481,11 @@ export default function App() {
       const lower = cleanName.toLowerCase();
       setLibrary((prev) => {
         if (prev.some((f) => (f.name || '').trim().toLowerCase() === lower)) {
-          return prev;
+          return prev.map((f) =>
+            (f.name || '').trim().toLowerCase() === lower
+              ? { ...f, lastUsedAt: newItem.timestamp }
+              : f
+          );
         }
         return [createLibraryItemFromLoggedFood(newItem), ...prev];
       });
@@ -1580,7 +1586,15 @@ export default function App() {
     });
 
     setLibrary((prev) => {
-      const known = new Set(prev.map((f) => (f.name || '').trim().toLowerCase()));
+      const nowTs = Date.now();
+      const loggedNames = new Set(
+        newItems.map((it) => (it.name || '').trim().toLowerCase()).filter(Boolean)
+      );
+      const updatedExisting = prev.map((f) => {
+        const lower = (f.name || '').trim().toLowerCase();
+        return loggedNames.has(lower) ? { ...f, lastUsedAt: nowTs } : f;
+      });
+      const known = new Set(updatedExisting.map((f) => (f.name || '').trim().toLowerCase()));
       const addedLibItems: LibraryFoodItem[] = [];
       newItems.forEach((item) => {
         const lower = (item.name || '').trim().toLowerCase();
@@ -1589,7 +1603,7 @@ export default function App() {
           addedLibItems.push(createLibraryItemFromLoggedFood(item));
         }
       });
-      return addedLibItems.length > 0 ? [...addedLibItems, ...prev] : prev;
+      return addedLibItems.length > 0 ? [...addedLibItems, ...updatedExisting] : updatedExisting;
     });
 
     const t = getUITranslations(config.language?.code, config.language?.labels);
@@ -2043,17 +2057,17 @@ export default function App() {
         isAiChatOpen={isChatOpen}
       />
 
-      {/* Toast Notification when Gemini or User changes userConfig */}
+      {/* Toast Notification positioned high at the top edge so it never overlaps the Food Library search bar */}
       {configToast.visible && (() => {
         const uiT = getUITranslations(config.language?.code, config.language?.labels);
         return (
-          <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 max-w-md w-full px-4 animate-in fade-in slide-in-from-top-4 duration-300">
-            <div className="p-3 rounded-2xl bg-slate-900/95 border border-emerald-500/50 text-white shadow-2xl flex items-center justify-between gap-3 backdrop-blur-md">
-              <div className="flex items-center gap-2.5 text-xs">
-                <span className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400">
-                  <Check className="w-4 h-4" />
+          <div className="fixed top-1 sm:top-1.5 left-1/2 -translate-x-1/2 z-[60] max-w-md w-full px-3 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="py-2 px-3 rounded-xl bg-slate-900/95 border border-emerald-500/50 text-white shadow-xl flex items-center justify-between gap-2.5 backdrop-blur-md">
+              <div className="flex items-center gap-2 text-xs min-w-0">
+                <span className="p-1 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0">
+                  <Check className="w-3.5 h-3.5" />
                 </span>
-                <div>
+                <div className="truncate">
                   <span className="font-bold text-emerald-300">{uiT.toastUpdatedPrefix}</span>{' '}
                   <span className="text-slate-200">{configToast.message}</span>
                 </div>
@@ -2062,7 +2076,7 @@ export default function App() {
               {previousConfig && (
                 <button
                   onClick={handleRevertConfig}
-                  className="flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition shrink-0"
+                  className="pointer-events-auto flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition shrink-0"
                 >
                   <RotateCcw className="w-3 h-3" />
                   <span>{uiT.revertChanges}</span>
@@ -2250,6 +2264,8 @@ export default function App() {
               onQuotaUsed={handleIncrementDemoUsage}
               langCode={config.language.code}
               labels={config.language.labels}
+              dayLogs={logs}
+              currentDateStr={currentDateStr}
               preselectedMealCategoryId={preselectedMealCategoryId}
               onClearPreselectedMealCategory={() => setPreselectedMealCategoryId(null)}
               onUpdateMetrics={(newMetrics) => {

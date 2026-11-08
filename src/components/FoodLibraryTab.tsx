@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { LibraryFoodItem, MetricConfig, MealCategoryConfig, LocalizationLabels } from '../types/config';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { LibraryFoodItem, MetricConfig, MealCategoryConfig, LocalizationLabels, DayLog } from '../types/config';
 import { ThemeStyles, getBorderRadiusClass } from '../utils/themeHelper';
 import { getUITranslations } from '../utils/translations';
 import {
@@ -23,6 +23,9 @@ import {
   ChevronDown,
   ChevronUp,
   ShoppingCart,
+  ArrowUpDown,
+  ArrowDown,
+  ArrowUp,
 } from 'lucide-react';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { getNutrientColor } from '../utils/nutrientColors';
@@ -41,6 +44,8 @@ interface FoodLibraryTabProps {
   apiKey?: string;
   langCode?: string;
   labels?: Partial<LocalizationLabels>;
+  dayLogs?: Record<string, DayLog>;
+  currentDateStr?: string;
   onUpdateMetrics?: (metrics: MetricConfig[]) => void;
   onSaveToLibrary: (item: LibraryFoodItem) => void;
   onDeleteFromLibrary: (id: string) => void;
@@ -57,6 +62,17 @@ interface FoodLibraryTabProps {
   onQuotaUsed?: (count: number) => void;
 }
 
+type SortField =
+  | 'last_used'
+  | 'alphabet'
+  | 'created_at'
+  | 'calories'
+  | 'proteins'
+  | 'fats'
+  | 'carbs';
+
+type SortDirection = 'desc' | 'asc';
+
 export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
   library,
   metrics,
@@ -66,6 +82,8 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
   borderRadius,
   langCode = 'ru',
   labels,
+  dayLogs,
+  currentDateStr,
   onUpdateMetrics,
   onSaveToLibrary,
   onDeleteFromLibrary,
@@ -80,6 +98,26 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
   const t = getUITranslations(langCode, labels);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
+
+  // Sorting state: default to 'last_used' and 'desc' (most recently added to daily menu / closest to active date first)
+  const [sortField, setSortField] = useState<SortField>('last_used');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const sortMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
+        setIsSortMenuOpen(false);
+      }
+    };
+    if (isSortMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isSortMenuOpen]);
 
   // Delete modal state
   const [deleteProductModal, setDeleteProductModal] = useState<{
@@ -123,11 +161,136 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const filteredLibrary = library.filter((item) => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCat = activeCategory === 'all' || item.category === activeCategory;
-    return matchesSearch && matchesCat;
-  });
+  // Precompute usage metrics per product name from dayLogs and item.lastUsedAt
+  const usageStatsByName = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        latestTimestamp: number;
+        minDateDiffMs: number;
+      }
+    >();
+
+    const refDateMs = currentDateStr ? Date.parse(`${currentDateStr}T12:00:00Z`) : Date.now();
+    const safeRefDateMs = Number.isNaN(refDateMs) ? Date.now() : refDateMs;
+
+    if (dayLogs && typeof dayLogs === 'object') {
+      Object.entries(dayLogs).forEach(([dateKey, dayLog]) => {
+        if (!dayLog || !Array.isArray(dayLog.items)) return;
+        const dayMs = Date.parse(`${dateKey}T12:00:00Z`);
+        const dateDiffMs = Number.isNaN(dayMs)
+          ? Number.MAX_SAFE_INTEGER
+          : Math.abs(safeRefDateMs - dayMs);
+
+        dayLog.items.forEach((loggedItem) => {
+          const lower = (loggedItem.name || '').trim().toLowerCase();
+          if (!lower) return;
+          const itemTs = Number(loggedItem.timestamp) || (Number.isNaN(dayMs) ? 0 : dayMs);
+          const existing = map.get(lower);
+          if (!existing) {
+            map.set(lower, {
+              latestTimestamp: itemTs,
+              minDateDiffMs: dateDiffMs,
+            });
+          } else {
+            map.set(lower, {
+              latestTimestamp: Math.max(existing.latestTimestamp, itemTs),
+              minDateDiffMs: Math.min(existing.minDateDiffMs, dateDiffMs),
+            });
+          }
+        });
+      });
+    }
+
+    return map;
+  }, [dayLogs, currentDateStr]);
+
+  const getNutrientPer100g = (item: LibraryFoodItem, nutrientKey: string): number => {
+    const rawVal = Number(item.nutrients?.[nutrientKey]) || 0;
+    const baseGrams = Math.max(1, Number(item.servingSizeGrams) || 100);
+    return (rawVal / baseGrams) * 100;
+  };
+
+  const filteredLibrary = useMemo(() => {
+    const filtered = library.filter((item) => {
+      const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCat = activeCategory === 'all' || item.category === activeCategory;
+      return matchesSearch && matchesCat;
+    });
+
+    const sorted = [...filtered].sort((a, b) => {
+      let cmp = 0;
+
+      if (sortField === 'last_used') {
+        const lowerA = (a.name || '').trim().toLowerCase();
+        const lowerB = (b.name || '').trim().toLowerCase();
+        const statsA = usageStatsByName.get(lowerA);
+        const statsB = usageStatsByName.get(lowerB);
+
+        const lastTsA = Math.max(Number(a.lastUsedAt) || 0, statsA?.latestTimestamp || 0);
+        const lastTsB = Math.max(Number(b.lastUsedAt) || 0, statsB?.latestTimestamp || 0);
+        const usedA = lastTsA > 0;
+        const usedB = lastTsB > 0;
+
+        if (usedA !== usedB) {
+          cmp = usedA ? 1 : -1;
+        } else if (usedA && usedB) {
+          const diffA = a.lastUsedAt ? 0 : (statsA?.minDateDiffMs ?? Number.MAX_SAFE_INTEGER);
+          const diffB = b.lastUsedAt ? 0 : (statsB?.minDateDiffMs ?? Number.MAX_SAFE_INTEGER);
+          if (diffA !== diffB) {
+            // Smaller distance to currentDateStr means more relevant (higher)
+            cmp = diffB - diffA;
+          } else if (lastTsA !== lastTsB) {
+            cmp = lastTsA - lastTsB;
+          } else {
+            cmp = (a.createdAt || 0) - (b.createdAt || 0);
+          }
+        } else {
+          cmp = (a.createdAt || 0) - (b.createdAt || 0);
+        }
+      } else if (sortField === 'alphabet') {
+        // For alphabetical: asc is A -> Z, desc is Z -> A
+        const alphaCmp = (a.name || '').localeCompare(b.name || '', langCode || 'ru', {
+          sensitivity: 'base',
+        });
+        return sortDirection === 'asc' ? alphaCmp : -alphaCmp;
+      } else if (sortField === 'created_at') {
+        cmp = (a.createdAt || 0) - (b.createdAt || 0);
+      } else if (
+        sortField === 'calories' ||
+        sortField === 'proteins' ||
+        sortField === 'fats' ||
+        sortField === 'carbs'
+      ) {
+        const valA = getNutrientPer100g(a, sortField);
+        const valB = getNutrientPer100g(b, sortField);
+        cmp = valA - valB;
+      }
+
+      if (cmp === 0) {
+        return (a.name || '').localeCompare(b.name || '', langCode || 'ru', {
+          sensitivity: 'base',
+        });
+      }
+
+      return sortDirection === 'desc' ? -cmp : cmp;
+    });
+
+    return sorted;
+  }, [library, searchTerm, activeCategory, sortField, sortDirection, usageStatsByName, langCode]);
+
+  const sortOptions: Array<{ id: SortField; label: string }> = [
+    { id: 'last_used', label: t.sortByLastUsed },
+    { id: 'alphabet', label: t.sortByAlphabet },
+    { id: 'created_at', label: t.sortByCreatedAt },
+    { id: 'calories', label: t.sortByCalories },
+    { id: 'proteins', label: t.sortByProteins },
+    { id: 'fats', label: t.sortByFats },
+    { id: 'carbs', label: t.sortByCarbs },
+  ];
+
+  const activeSortLabel =
+    sortOptions.find((o) => o.id === sortField)?.label || t.sortByLastUsed;
 
   // Quick Nutrient Visibility Settings modal
   const [isNutrientVisibilityModalOpen, setIsNutrientVisibilityModalOpen] = useState(false);
@@ -390,7 +553,7 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
   return (
     <div className="space-y-4">
       {/* Search and Action Bar */}
-      <div className={`border ${themeStyles.borderColor} ${themeStyles.cardBg} ${radiusClass} p-3.5 shadow-sm space-y-3`}>
+      <div className={`relative z-30 border ${themeStyles.borderColor} ${themeStyles.cardBg} ${radiusClass} p-3.5 shadow-sm space-y-3`}>
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5">
           {/* Search Box */}
           <div className="relative flex-1">
@@ -446,20 +609,105 @@ export const FoodLibraryTab: React.FC<FoodLibraryTabProps> = ({
         </div>
 
         <div className="flex items-center justify-end gap-2 text-[11px] text-slate-400 pt-0.5 border-t border-slate-800/60">
+          {/* Sort Button & Dropdown placed strictly to the left of Nutrient Display button */}
+          <div className="relative flex items-center" ref={sortMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsSortMenuOpen((prev) => !prev)}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition active:scale-95 shrink-0"
+              title={`${t.sortProductsBtn}: ${activeSortLabel}`}
+            >
+              <ArrowUpDown className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>{t.sortProductsBtn}</span>
+              <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
+            </button>
+
+            {isSortMenuOpen && (
+              <div className="absolute left-0 top-full mt-1.5 w-64 sm:w-72 rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl p-2 z-50 space-y-1.5 animate-in fade-in zoom-in-95 duration-150">
+                {/* Direction selector buttons */}
+                <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-950/80 border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setSortDirection('desc')}
+                    className={`flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-semibold transition ${
+                      sortDirection === 'desc'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <ArrowDown className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{t.sortOrderDesc}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSortDirection('asc')}
+                    className={`flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-semibold transition ${
+                      sortDirection === 'asc'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <ArrowUp className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{t.sortOrderAsc}</span>
+                  </button>
+                </div>
+
+                {/* 7 Sort Field Options */}
+                <div className="space-y-0.5">
+                  {sortOptions.map((opt) => {
+                    const isSelected = sortField === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          if (sortField === opt.id) {
+                            setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'));
+                          } else {
+                            setSortField(opt.id);
+                            setSortDirection(opt.id === 'alphabet' ? 'asc' : 'desc');
+                          }
+                          setIsSortMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl text-xs text-left transition ${
+                          isSelected
+                            ? 'bg-emerald-500/15 text-emerald-300 font-semibold border border-emerald-500/30'
+                            : 'text-slate-200 hover:bg-slate-800/80'
+                        }`}
+                      >
+                        <span className="truncate">{opt.label}</span>
+                        {isSelected && (
+                          <span className="flex items-center gap-1 text-[10px] text-emerald-400 shrink-0">
+                            {sortDirection === 'desc' ? (
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            ) : (
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            )}
+                            <Check className="w-3.5 h-3.5" />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
           <button
             type="button"
             onClick={() => setIsNutrientVisibilityModalOpen(true)}
             className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition active:scale-95 shrink-0"
             title={t.nutrientDisplay}
           >
-            <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
+            <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
             <span>{t.nutrientDisplay}</span>
           </button>
         </div>
       </div>
 
       {/* Products Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+      <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
         {filteredLibrary.map((item) => (
           <div
             key={item.id}

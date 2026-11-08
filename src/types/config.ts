@@ -294,6 +294,7 @@ export interface LibraryFoodItem {
   nutrients: Record<string, number>; // per servingSizeGrams
   category?: string; // 'protein' | 'grain' | 'dairy' | 'vegetable' | 'fruit' | 'snack' | 'drink' | 'custom'
   createdAt: number;
+  lastUsedAt?: number;
   source?: 'manual' | 'ai_name' | 'photo_label' | 'photo_dish' | 'preset';
   photoUrl?: string;
 }

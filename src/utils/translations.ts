@@ -436,6 +436,16 @@ export interface ExtendedLocalizationLabels extends LocalizationLabels {
   timerStartBtn: string;
   timerResetStepTitle: string;
   errAllModelsOverloaded: string;
+  sortProductsBtn: string;
+  sortByLastUsed: string;
+  sortByAlphabet: string;
+  sortByCreatedAt: string;
+  sortByCalories: string;
+  sortByProteins: string;
+  sortByFats: string;
+  sortByCarbs: string;
+  sortOrderDesc: string;
+  sortOrderAsc: string;
 }
 
 export const COMPLETE_RUSSIAN_LABELS: ExtendedLocalizationLabels = {
@@ -899,6 +909,16 @@ export const COMPLETE_RUSSIAN_LABELS: ExtendedLocalizationLabels = {
   timerStartBtn: 'Старт',
   timerResetStepTitle: 'Сбросить шаг',
   errAllModelsOverloaded: 'Все модели ИИ сейчас перегружены (Gemini 3.5 Flash Lite → Gemini 3.1 Flash Lite → Gemini 2.5 Flash Lite → Gemini 2.0 Flash Lite). Запрос не был списан, пожалуйста, попробуйте чуть позже.',
+  sortProductsBtn: 'Сортировка',
+  sortByLastUsed: 'По последнему использованию',
+  sortByAlphabet: 'По алфавиту',
+  sortByCreatedAt: 'По времени добавления в библиотеку',
+  sortByCalories: 'По калориям',
+  sortByProteins: 'По белкам',
+  sortByFats: 'По жирам',
+  sortByCarbs: 'По углеводам',
+  sortOrderDesc: 'От большего к наименьшему',
+  sortOrderAsc: 'От наименьшего к большему',
 };
 
 export const COMPLETE_ENGLISH_LABELS: ExtendedLocalizationLabels = {
@@ -1362,6 +1382,16 @@ export const COMPLETE_ENGLISH_LABELS: ExtendedLocalizationLabels = {
   timerStartBtn: 'Start',
   timerResetStepTitle: 'Reset step',
   errAllModelsOverloaded: 'All AI models are currently overloaded (Gemini 3.5 Flash Lite → Gemini 3.1 Flash Lite → Gemini 2.5 Flash Lite → Gemini 2.0 Flash Lite). No request was deducted, please try again shortly.',
+  sortProductsBtn: 'Sort',
+  sortByLastUsed: 'By last used',
+  sortByAlphabet: 'Alphabetically',
+  sortByCreatedAt: 'By time added to library',
+  sortByCalories: 'By calories',
+  sortByProteins: 'By protein',
+  sortByFats: 'By fat',
+  sortByCarbs: 'By carbs',
+  sortOrderDesc: 'High to low (descending)',
+  sortOrderAsc: 'Low to high (ascending)',
 };
 
 export const COMPLETE_POLISH_LABELS: ExtendedLocalizationLabels = {
@@ -1825,6 +1855,16 @@ export const COMPLETE_POLISH_LABELS: ExtendedLocalizationLabels = {
   timerStartBtn: 'Start',
   timerResetStepTitle: 'Resetuj krok',
   errAllModelsOverloaded: 'Wszystkie modele AI są obecnie przeciążone (Gemini 3.5 Flash Lite → Gemini 3.1 Flash Lite → Gemini 2.5 Flash Lite → Gemini 2.0 Flash Lite). Zapytanie nie zostało pobrane, spróbuj ponownie za chwilę.',
+  sortProductsBtn: 'Sortowanie',
+  sortByLastUsed: 'Wg ostatniego użycia',
+  sortByAlphabet: 'Alfabetycznie',
+  sortByCreatedAt: 'Wg czasu dodania do bazy',
+  sortByCalories: 'Wg kalorii',
+  sortByProteins: 'Wg białka',
+  sortByFats: 'Wg tłuszczów',
+  sortByCarbs: 'Wg węglowodanów',
+  sortOrderDesc: 'Od największego do najmniejszego',
+  sortOrderAsc: 'Od najmniejszego do największego',
 };
 
 export function getWaterProductName(langCode: string = 'ru', customWaterName?: string): string {
